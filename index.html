@@ -1,731 +1,1991 @@
-
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
-    <title>FireGen - Gestión Ministerial</title>
+    <title>FireGen V2.75 - Gestión Ministerial</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.18.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.18.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
-        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); transition: all 0.2s; }
-        .tab-active { border-bottom: 4px solid #ea580c; color: #ea580c; font-weight: 700; background: #fff7ed; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+
+        /* ── BASE ── */
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #1e293b; }
+        .card { background: white; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); transition: all 0.2s; }
+        .tab-active { border-bottom: 3px solid #ea580c; color: #ea580c; font-weight: 700; background: #fff7ed; }
         .status-badge { padding: 4px 10px; border-radius: 9999px; font-size: 0.70rem; font-weight: 700; text-transform: uppercase; }
         .table-container { max-height: 65vh; overflow-y: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; }
         th { position: sticky; top: 0; background: #f8fafc; z-index: 10; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        /* iOS zoom prevention */
         input, select, textarea { font-size: 16px !important; }
-        @media (max-width: 640px) {
-            .table-container table { min-width: 700px; }
-            .card { border-radius: 8px; }
-        }
-        
-        .btn-attendance { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; transition: all 0.2s; cursor: pointer; }
-        .att-present { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .att-absent { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .att-new { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; font-weight: bold; }
-        .att-empty { background-color: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; }
 
+        /* ── ASISTENCIA ── */
+        .btn-attendance { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 14px; transition: all 0.15s; cursor: pointer; }
+        .att-present { background:#dcfce7; color:#166534; border:1px solid #bbf7d0; }
+        .att-absent  { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+        .att-new     { background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:bold; }
+        .att-empty   { background:#f1f5f9; color:#94a3b8; border:1px solid #e2e8f0; }
+
+        /* ── PRINT ── */
         @media print {
-            .no-print { display: none !important; }
-            body { background: white; padding: 0; }
-            .card { box-shadow: none; border: 1px solid #e2e8f0; margin-bottom: 20px; }
-            .max-w-screen-2xl { max-width: 100% !important; }
+            .no-print { display:none !important; }
+            body { background:white; padding:0; }
+            .card { box-shadow:none; border:1px solid #e2e8f0; margin-bottom:20px; }
+            .max-w-screen-2xl { max-width:100% !important; }
+        }
+
+        /* ── V2 / V2.5 SLIDE-OVER ── */
+        #expedienteOverlay {
+            position:fixed; inset:0; z-index:100;
+            display:flex; align-items:stretch; justify-content:flex-end;
+            pointer-events:none; opacity:0; transition:opacity 0.25s;
+        }
+        #expedienteOverlay.active { pointer-events:all; opacity:1; }
+        #expedienteOverlay .exp-backdrop {
+            position:absolute; inset:0;
+            background:rgba(15,23,42,0.6); backdrop-filter:blur(4px);
+        }
+        #expedienteOverlay .exp-panel {
+            position:relative; z-index:1;
+            width:100%; max-width:460px; background:#fff;
+            overflow-y:auto; display:flex; flex-direction:column;
+            transform:translateX(100%); transition:transform 0.32s cubic-bezier(.4,0,.2,1);
+            box-shadow:-10px 0 50px rgba(0,0,0,0.2);
+        }
+        #expedienteOverlay.active .exp-panel { transform:translateX(0); }
+
+        /* ── AVATARES ── */
+        .exp-avatar {
+            width:100px; height:100px; border-radius:50%;
+            object-fit:cover; border:4px solid rgba(255,255,255,0.3);
+            box-shadow:0 6px 20px rgba(0,0,0,0.2); background:#f1f5f9;
+        }
+        .exp-avatar-placeholder {
+            width:100px; height:100px; border-radius:50%;
+            background:linear-gradient(135deg,#f97316,#b45309);
+            display:flex; align-items:center; justify-content:center;
+            font-size:2.8rem; color:#fff; font-weight:900;
+            border:4px solid rgba(255,255,255,0.2);
+            box-shadow:0 6px 20px rgba(0,0,0,0.2); flex-shrink:0;
+        }
+
+        /* ── NOMBRE CLICABLE ── */
+        .member-name-btn {
+            background:none; border:none; cursor:pointer;
+            color:#1e293b; font-weight:700; text-align:left; padding:0;
+            transition:color 0.15s; text-decoration:underline dotted #cbd5e1;
+        }
+        .member-name-btn:hover { color:#ea580c; }
+
+        /* ── RESCUE CHIPS ── */
+        .rescue-chip {
+            display:flex; align-items:center; gap:10px;
+            background:#fff1f2; border:1px solid #fecdd3;
+            border-radius:12px; padding:10px 14px; transition:box-shadow 0.2s;
+        }
+        .rescue-chip:hover { box-shadow:0 2px 8px rgba(239,68,68,.15); }
+        .rescue-chip .chip-name  { font-weight:700; color:#991b1b; font-size:0.85rem; }
+        .rescue-chip .chip-phone { font-size:0.75rem; color:#64748b; }
+
+        /* ── ENGAGEMENT BADGES ── */
+        .eng-activo      { background:#dcfce7; color:#166534; }
+        .eng-inconstante { background:#fef9c3; color:#854d0e; }
+        .eng-enfriando   { background:#ffedd5; color:#9a3412; }
+        .eng-alejado     { background:#fee2e2; color:#991b1b; }
+
+        /* ── SAVE FLASH ── */
+        @keyframes saveFlash { 0%{opacity:1} 50%{opacity:.4} 100%{opacity:1} }
+        .save-flash { animation:saveFlash 0.5s; }
+
+        /* ── V2.5: TABLA HISTÓRICA (solo lectura) ── */
+        .hist-readonly {
+            background:#f8fafc; color:#475569; font-weight:700;
+            text-align:center; font-size:0.95rem;
+            border:none; outline:none; width:100%; cursor:default;
+        }
+
+        /* ── V2.5: GRÁFICA CARD ── */
+        #chartCard { background:linear-gradient(135deg,#0f172a,#1e293b); }
+        #chartCard h3 { color:#f97316; }
+
+        /* ── V2.5: ANÁLISIS TEXTAREA ── */
+        #analysisTextarea {
+            resize:vertical; min-height:90px;
+            border:2px solid #e2e8f0; border-radius:12px;
+            padding:12px; outline:none; transition:border-color 0.2s;
+            font-family:'Inter',sans-serif;
+        }
+        #analysisTextarea:focus { border-color:#ea580c; }
+
+        /* ── AUTOGUARDADO BADGE ── */
+        .auto-badge {
+            display:inline-flex; align-items:center; gap:5px;
+            background:#dcfce7; color:#166534;
+            font-size:0.65rem; font-weight:800; text-transform:uppercase;
+            padding:3px 8px; border-radius:99px;
+            transition:opacity 0.5s; opacity:0;
+        }
+        .auto-badge.show { opacity:1; }
+
+        /* ══════════════════════════════════════════════════════════
+           V2.75: DIRECTORIO MAESTRO — PANTALLA COMPLETA
+        ══════════════════════════════════════════════════════════ */
+        #directorioOverlay {
+            position:fixed; inset:0; z-index:200;
+            background:#ffffff;
+            display:flex; flex-direction:column;
+            transform:translateY(100%);
+            transition:transform 0.38s cubic-bezier(.4,0,.2,1);
+            overflow:hidden;
+        }
+        #directorioOverlay.active { transform:translateY(0); }
+
+        #directorioOverlay .dir-header {
+            background:linear-gradient(135deg,#0f172a 0%,#1e293b 60%,#0c1a2e 100%);
+            padding:16px 20px;
+            display:flex; align-items:center; justify-content:space-between;
+            flex-shrink:0;
+            box-shadow:0 4px 20px rgba(0,0,0,0.4);
+        }
+        #directorioOverlay .dir-body {
+            flex:1; overflow-y:auto; padding:20px;
+            background:#f8fafc;
+        }
+
+        /* Tarjeta de directorio */
+        .dir-card {
+            background:white; border-radius:16px;
+            box-shadow:0 2px 12px rgba(0,0,0,0.07);
+            padding:16px; display:flex; gap:14px;
+            transition:box-shadow 0.2s, transform 0.2s;
+            border:1px solid #f1f5f9;
+        }
+        .dir-card:hover { box-shadow:0 6px 24px rgba(234,88,12,0.12); transform:translateY(-1px); }
+
+        .dir-photo {
+            width:76px; height:76px; border-radius:50%;
+            object-fit:cover; flex-shrink:0;
+            border:3px solid #fed7aa;
+            box-shadow:0 2px 8px rgba(0,0,0,0.12);
+        }
+        .dir-photo-placeholder {
+            width:76px; height:76px; border-radius:50%;
+            background:linear-gradient(135deg,#f97316,#b45309);
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.8rem; color:#fff; font-weight:900;
+            border:3px solid #fed7aa;
+            flex-shrink:0;
+        }
+        .dir-info { flex:1; min-width:0; }
+        .dir-name { font-weight:900; font-size:0.95rem; color:#0f172a; margin-bottom:2px; }
+        .dir-meta { font-size:0.73rem; color:#64748b; margin-bottom:4px; display:flex; flex-wrap:wrap; gap:4px; }
+        .dir-badge { font-size:0.62rem; font-weight:800; padding:2px 7px; border-radius:99px; text-transform:uppercase; }
+        .dir-spirit { font-size:0.72rem; color:#475569; margin-top:4px; }
+        .dir-wa-btn {
+            display:inline-flex; align-items:center; gap:4px;
+            background:#22c55e; color:white;
+            border:none; border-radius:8px;
+            padding:5px 10px; font-size:0.7rem; font-weight:700;
+            cursor:pointer; transition:background 0.2s; text-decoration:none;
+            margin-top:6px;
+        }
+        .dir-wa-btn:hover { background:#16a34a; }
+
+        /* ══════════════════════════════════════════════════════════
+           V2.75: BOTTOM NAVIGATION MÓVIL
+        ══════════════════════════════════════════════════════════ */
+        #bottomNav {
+            display:none; /* oculto en desktop */
+            position:fixed; bottom:0; left:0; right:0; z-index:90;
+            background:white;
+            border-top:1px solid #e2e8f0;
+            box-shadow:0 -4px 20px rgba(0,0,0,0.08);
+            padding:6px 0 env(safe-area-inset-bottom, 6px);
+        }
+        .bottom-nav-inner {
+            display:flex; align-items:stretch;
+        }
+        .bn-btn {
+            flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+            padding:6px 4px; gap:3px; cursor:pointer;
+            border:none; background:transparent;
+            color:#94a3b8; font-size:0.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+            transition:color 0.15s;
+            -webkit-tap-highlight-color:transparent;
+        }
+        .bn-btn i { font-size:1.15rem; }
+        .bn-btn.bn-active { color:#ea580c; }
+        .bn-btn.bn-active i { transform:scale(1.15); }
+
+        @media (max-width: 767px) {
+            #bottomNav { display:block; }
+            #topNav    { display:none !important; }
+            /* espacio para bottom nav */
+            body { padding-bottom:70px; }
+            .table-container table { min-width:600px; }
+            .card { border-radius:10px; }
+            /* Chart responsive */
+            #chartCard .relative { height:220px !important; }
+        }
+
+        /* ══════════════════════════════════════════════════════════
+           V2.75: MOBILE CARD LIST — Base Maestro
+        ══════════════════════════════════════════════════════════ */
+        .mobile-member-card {
+            background:white; border-radius:12px;
+            padding:12px; display:flex; gap:12px;
+            box-shadow:0 1px 6px rgba(0,0,0,0.06);
+            border:1px solid #f1f5f9;
+            margin-bottom:8px;
+            transition:box-shadow 0.2s;
+        }
+        .mobile-member-card:active { box-shadow:0 2px 10px rgba(234,88,12,0.12); }
+        .mobile-member-photo {
+            width:52px; height:52px; border-radius:50%;
+            object-fit:cover; flex-shrink:0;
+            border:2px solid #fed7aa;
+        }
+        .mobile-member-photo-ph {
+            width:52px; height:52px; border-radius:50%;
+            background:linear-gradient(135deg,#f97316,#b45309);
+            display:flex; align-items:center; justify-content:center;
+            font-size:1.1rem; color:#fff; font-weight:900;
+            border:2px solid #fed7aa; flex-shrink:0;
+        }
+        .mobile-member-info { flex:1; min-width:0; }
+        .mobile-member-name { font-weight:800; font-size:0.88rem; color:#0f172a; }
+        .mobile-member-sub  { font-size:0.7rem; color:#64748b; margin-top:1px; }
+        .mobile-member-actions { display:flex; gap:6px; margin-top:6px; }
+
+        /* ══════════════════════════════════════════════════════════
+           V2.75: MOBILE CARD LIST — Asistencia
+        ══════════════════════════════════════════════════════════ */
+        .mobile-att-card {
+            background:white; border-radius:12px;
+            padding:12px; display:flex; gap:10px;
+            box-shadow:0 1px 6px rgba(0,0,0,0.06);
+            border:1px solid #f1f5f9;
+            margin-bottom:8px;
+        }
+        .mobile-att-info { flex:1; min-width:0; }
+        .mobile-att-name { font-weight:800; font-size:0.85rem; color:#0f172a; margin-bottom:6px; }
+        .mobile-att-weeks { display:flex; gap:4px; flex-wrap:wrap; }
+        .mobile-att-label { font-size:0.6rem; color:#94a3b8; font-weight:700; margin-top:4px; }
+
+        /* ══════════════════════════════════════════════════════════
+           V2.75: KPI MOBILE — 2 columnas bien espaciadas
+        ══════════════════════════════════════════════════════════ */
+        @media (max-width: 767px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+            .kpi-card { padding: 14px 12px !important; }
+            .kpi-card h3 { font-size: 1.8rem !important; }
         }
     </style>
 </head>
 <body class="p-2 md:p-8">
 
-    <div class="max-w-screen-2xl mx-auto">
-        <!-- HEADER -->
-        <header class="flex flex-col lg:flex-row justify-between items-start mb-4 md:mb-8 gap-3 md:gap-6 no-print">
-            <div>
-                <h1 class="text-2xl md:text-4xl font-extrabold text-slate-900 flex items-center gap-2 md:gap-3">
-                    <i class="fas fa-fire text-orange-600 animate-pulse"></i> FireGen Secretariado
-                </h1>
-                <p class="text-slate-500 font-medium text-sm md:text-lg mt-1">Administración y Crecimiento Ministerial Real</p>
+<div class="max-w-screen-2xl mx-auto">
+
+    <!-- ════════════════════ HEADER ════════════════════ -->
+    <header class="flex flex-col lg:flex-row justify-between items-start mb-4 md:mb-8 gap-3 md:gap-6 no-print">
+        <div>
+            <h1 class="text-2xl md:text-4xl font-extrabold text-slate-900 flex items-center gap-2 md:gap-3">
+                <i class="fas fa-fire text-orange-600 animate-pulse"></i> FireGen Secretariado
+                <span class="ml-2 text-[11px] font-black bg-gradient-to-r from-orange-500 to-red-600 text-white px-2 py-1 rounded-full align-middle shadow">V2.75</span>
+            </h1>
+            <p class="text-slate-500 font-medium text-sm md:text-lg mt-1">Administración y Crecimiento Ministerial Real</p>
+        </div>
+        <!-- Navegación DESKTOP (se oculta en móvil vía CSS) -->
+        <nav id="topNav" class="flex bg-white rounded-2xl shadow-sm border p-1 md:p-1.5 overflow-x-auto w-full lg:w-auto">
+            <button onclick="switchTab('master')"     id="tab-master"     class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold transition-all tab-active whitespace-nowrap flex-shrink-0"><i class="fas fa-database mr-1 md:mr-2"></i><span class="hidden sm:inline">Base </span>Maestro</button>
+            <button onclick="switchTab('attendance')" id="tab-attendance" class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap flex-shrink-0"><i class="fas fa-calendar-check mr-1 md:mr-2"></i>Asistencia</button>
+            <button onclick="switchTab('report')"     id="tab-report"     class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap flex-shrink-0"><i class="fas fa-chart-line mr-1 md:mr-2"></i><span class="hidden sm:inline">Informe </span>Mes</button>
+            <button onclick="switchTab('strategy')"   id="tab-strategy"   class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap flex-shrink-0"><i class="fas fa-bullseye mr-1 md:mr-2"></i>Estrategias</button>
+        </nav>
+    </header>
+
+    <main>
+
+        <!-- ════════ TAB 0: BASE MAESTRO ════════ -->
+        <section id="view-master">
+            <!-- KPIs — 2 col en mobile, 4 en desktop -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-8 kpi-grid">
+                <div class="card p-5 border-l-4 border-blue-500 kpi-card">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Total Ministerio</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-total">0</h3>
+                    <p class="text-[10px] text-slate-400 mt-2">Jóvenes registrados</p>
+                </div>
+                <div class="card p-5 border-l-4 border-orange-500 kpi-card">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Liderazgo</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-lideres">0</h3>
+                    <p class="text-[10px] text-slate-400 mt-2">En servicio activo</p>
+                </div>
+                <div class="card p-5 border-l-4 border-green-500 kpi-card">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Bautizados</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-bautizados">0</h3>
+                    <p class="text-[10px] text-slate-400 mt-2">Compromiso público</p>
+                </div>
+                <div class="card p-5 border-l-4 border-red-500 kpi-card">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">En Riesgo</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-riesgo">0</h3>
+                    <p class="text-[10px] text-red-500 mt-2 font-bold animate-pulse">¡Requiere Seguimiento!</p>
+                </div>
             </div>
-            
-            <nav class="flex bg-white rounded-2xl shadow-sm border p-1 md:p-1.5 overflow-x-auto w-full lg:w-auto scrollbar-hide -mx-1 md:mx-0">
-                <button onclick="switchTab('master')" id="tab-master" class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold transition-all tab-active whitespace-nowrap min-w-[auto] flex-shrink-0">
-                    <i class="fas fa-database mr-1 md:mr-2"></i><span class="hidden sm:inline">Base </span>Maestro
-                </button>
-                <button onclick="switchTab('attendance')" id="tab-attendance" class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap min-w-[auto] flex-shrink-0">
-                    <i class="fas fa-calendar-check mr-1 md:mr-2"></i>Asistencia
-                </button>
-                <button onclick="switchTab('report')" id="tab-report" class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap min-w-[auto] flex-shrink-0">
-                    <i class="fas fa-chart-line mr-1 md:mr-2"></i><span class="hidden sm:inline">Informe </span>Mes
-                </button>
-                <button onclick="switchTab('strategy')" id="tab-strategy" class="px-3 md:px-6 py-2.5 rounded-xl text-xs md:text-sm font-semibold text-slate-500 transition-all hover:bg-slate-50 whitespace-nowrap min-w-[auto] flex-shrink-0">
-                    <i class="fas fa-bullseye mr-1 md:mr-2"></i>Estrategias
-                </button>
-            </nav>
-        </header>
 
-        <main>
-            <!-- FORMATO 0: BASE DE DATOS GENERAL -->
-            <section id="view-master">
-                <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-8">
-                    <div class="card p-5 border-l-4 border-blue-500 bg-white">
-                        <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Total Ministerio</p>
-                        <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-total">0</h3>
-                        <p class="text-[10px] text-slate-400 mt-2">Jóvenes registrados</p>
-                    </div>
-                    <div class="card p-5 border-l-4 border-orange-500">
-                        <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Liderazgo</p>
-                        <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-lideres">0</h3>
-                        <p class="text-[10px] text-slate-400 mt-2">En servicio activo</p>
-                    </div>
-                    <div class="card p-5 border-l-4 border-green-500">
-                        <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Bautizados</p>
-                        <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-bautizados">0</h3>
-                        <p class="text-[10px] text-slate-400 mt-2">Compromiso público</p>
-                    </div>
-                    <div class="card p-5 border-l-4 border-red-500">
-                        <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Inconstantes</p>
-                        <h3 class="text-3xl font-black text-slate-800 mt-1" id="stat-riesgo">0</h3>
-                        <p class="text-[10px] text-red-500 mt-2 font-bold animate-pulse">¡Requiere Seguimiento!</p>
+            <!-- Barra de herramientas -->
+            <div class="card p-3 md:p-4 mb-4 md:mb-6 flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center no-print">
+                <div class="flex-1 min-w-0">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
+                        <input type="text" id="searchInput" onkeyup="filterMaster()" placeholder="Buscar miembro..." class="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
                     </div>
                 </div>
+                <div class="flex gap-2">
+                    <!-- V2.75: Botón Directorio Profesional -->
+                    <button onclick="openDirectorio()" title="Directorio Profesional" class="bg-slate-100 hover:bg-orange-100 hover:text-orange-700 text-slate-700 px-4 py-3 rounded-xl font-bold transition-all flex items-center gap-2 border text-sm flex-1 sm:flex-none justify-center">
+                        <i class="fas fa-address-book"></i><span class="hidden sm:inline">Directorio</span>
+                    </button>
+                    <button onclick="exportMaster()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold transition-all flex items-center gap-2 border text-sm flex-1 sm:flex-none justify-center">
+                        <i class="fas fa-file-export"></i><span class="hidden sm:inline">Exportar</span><span class="sm:hidden">CSV</span>
+                    </button>
+                    <button onclick="openNewMemberModal()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 md:px-8 py-3 rounded-xl font-bold transition-all shadow-md flex items-center gap-2 text-sm flex-1 sm:flex-none justify-center">
+                        <i class="fas fa-user-plus"></i> Nuevo
+                    </button>
+                </div>
+            </div>
 
-                <div class="card p-3 md:p-4 mb-4 md:mb-6 flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 items-stretch sm:items-center no-print">
-                    <div class="flex-1 min-w-0">
-                        <div class="relative">
-                            <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
-                            <input type="text" id="searchInput" onkeyup="filterMaster()" placeholder="Buscar..." class="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none">
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="exportMaster()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 md:px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 border border-slate-200 text-sm flex-1 sm:flex-none justify-center">
-                            <i class="fas fa-file-export"></i> <span class="hidden sm:inline">Exportar</span><span class="sm:hidden">CSV</span>
-                        </button>
-                        <button onclick="openModal('userModal')" class="bg-orange-600 hover:bg-orange-700 text-white px-4 md:px-8 py-3 rounded-xl font-bold transition-all shadow-md flex items-center gap-2 text-sm flex-1 sm:flex-none justify-center">
-                            <i class="fas fa-user-plus"></i> Nuevo
-                        </button>
+            <!-- Tabla DESKTOP (oculta en móvil) -->
+            <div class="card overflow-hidden hidden md:block">
+                <div class="table-container overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="bg-slate-50 border-b-2 border-slate-100">
+                                <th class="p-4 text-slate-600 font-bold">N°</th>
+                                <th class="p-4 text-slate-600 font-bold">Nombre</th>
+                                <th class="p-4 text-slate-600 font-bold">Edad</th>
+                                <th class="p-4 text-slate-600 font-bold">Teléfono / Redes</th>
+                                <th class="p-4 text-slate-600 font-bold">Estado Espiritual</th>
+                                <th class="p-4 text-slate-600 font-bold">Área Servicio</th>
+                                <th class="p-4 text-slate-600 font-bold">Líder Asignado</th>
+                                <th class="p-4 text-slate-600 font-bold">Asistencia</th>
+                                <th class="p-4 text-slate-600 font-bold no-print">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="emptyMaster" class="p-12 text-center text-slate-400 italic">
+                        No hay registros. Haz clic en "Nuevo" para empezar.
                     </div>
                 </div>
+            </div>
 
-                <div class="card overflow-hidden">
-                    <div class="table-container overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <thead>
-                                <tr class="bg-slate-50 border-b-2 border-slate-100">
-                                    <th class="p-4 text-slate-700">N°</th>
-                                    <th class="p-4 text-slate-700">Nombre</th>
-                                    <th class="p-4 text-slate-700">Edad</th>
-                                    <th class="p-4 text-slate-700">Teléfono/Redes</th>
-                                    <th class="p-4 text-slate-700">Estado Espiritual</th>
-                                    <th class="p-4 text-slate-700">Área Servicio</th>
-                                    <th class="p-4 text-slate-700">Líder Asignado</th>
-                                    <th class="p-4 text-slate-700">Asistencia</th>
-                                    <th class="p-4 text-slate-700 no-print">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody id="masterBody" class="divide-y divide-slate-100">
-                                <!-- Datos JS -->
-                            </tbody>
-                        </table>
-                        <div id="emptyMaster" class="p-12 text-center text-slate-400 italic">
-                            No hay registros. Haz clic en "Nuevo Registro" para empezar.
-                        </div>
+            <!-- Lista MÓVIL (oculta en desktop) -->
+            <div id="masterMobileList" class="md:hidden">
+                <div id="emptyMasterMobile" class="p-12 text-center text-slate-400 italic hidden">
+                    No hay registros. Toca "Nuevo" para empezar.
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════ TAB 1: ASISTENCIA SEMANAL ════════ -->
+        <section id="view-attendance" class="hidden">
+            <div class="card p-4 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
+                <div class="flex items-center gap-5">
+                    <div class="bg-orange-100 text-orange-700 p-3 rounded-xl"><i class="fas fa-calendar-day text-2xl"></i></div>
+                    <div>
+                        <h2 class="text-base md:text-xl font-black text-slate-800 uppercase tracking-tighter" id="attCurrentMonthDisplay">Cargando…</h2>
+                        <p class="text-sm text-slate-500">Control detallado de asistencia nominal</p>
                     </div>
                 </div>
-            </section>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 no-print w-full md:w-auto">
+                    <div class="flex flex-col">
+                        <label class="text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Seleccionar Periodo</label>
+                        <input type="month" id="attMonthSelector" onchange="changeAttendanceMonth()" class="p-2 border rounded-lg bg-white font-bold outline-none cursor-pointer focus:ring-2 focus:ring-orange-500">
+                    </div>
+                    <button onclick="exportAttendance()" class="bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-slate-900 transition-all flex items-center gap-2 self-end">
+                        <i class="fas fa-file-csv"></i> Exportar CSV
+                    </button>
+                </div>
+            </div>
 
-            <!-- FORMATO 1: ASISTENCIA SEMANAL -->
-            <section id="view-attendance" class="hidden">
-                <div class="card p-4 md:p-6 mb-4 md:mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4">
-                    <div class="flex items-center gap-6">
-                        <div class="bg-orange-100 text-orange-700 p-3 rounded-xl">
-                            <i class="fas fa-calendar-day text-2xl"></i>
-                        </div>
+            <!-- V2.5: banner autosync -->
+            <div class="mb-3 flex items-center gap-2 px-1">
+                <i class="fas fa-bolt text-orange-400 text-xs"></i>
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Asistencia sincronizada automáticamente con el Informe Mensual</span>
+                <span id="attSyncBadge" class="auto-badge"><i class="fas fa-check-circle"></i> Guardado</span>
+            </div>
+
+            <!-- Tabla DESKTOP asistencia -->
+            <div class="card overflow-hidden hidden md:block">
+                <div class="table-container overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50">
+                                <th class="p-4 border-b font-bold w-64">Nombre del Joven</th>
+                                <th class="p-4 border-b text-center">Sem 1</th>
+                                <th class="p-4 border-b text-center">Sem 2</th>
+                                <th class="p-4 border-b text-center">Sem 3</th>
+                                <th class="p-4 border-b text-center">Sem 4</th>
+                                <th class="p-4 border-b text-center">Sem 5</th>
+                                <th class="p-4 border-b text-center bg-orange-50 text-orange-700 font-black">TOTAL</th>
+                                <th class="p-4 border-b">Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                    <div id="emptyAttendance" class="p-12 text-center text-slate-400 italic">Agrega jóvenes en la Base Maestro para pasar asistencia.</div>
+                </div>
+                <div class="p-3 md:p-4 bg-slate-50 flex flex-wrap gap-3 md:gap-4 text-[10px] md:text-[11px] font-bold uppercase no-print">
+                    <span class="flex items-center gap-1.5"><div class="att-present btn-attendance">✔</div> Presente</span>
+                    <span class="flex items-center gap-1.5"><div class="att-absent btn-attendance">✖</div> Ausente</span>
+                    <span class="flex items-center gap-1.5"><div class="att-new btn-attendance">N</div> Nuevo</span>
+                    <span class="flex items-center gap-1.5"><div class="att-empty btn-attendance">?</div> Sin marcar</span>
+                </div>
+            </div>
+
+            <!-- Lista MÓVIL asistencia -->
+            <div id="attendanceMobileList" class="md:hidden space-y-2">
+                <div id="emptyAttendanceMobile" class="p-12 text-center text-slate-400 italic hidden">
+                    Agrega jóvenes en la Base Maestro para pasar asistencia.
+                </div>
+                <!-- Leyenda móvil -->
+                <div class="flex gap-3 px-1 pb-1 text-[10px] font-bold uppercase flex-wrap">
+                    <span class="flex items-center gap-1"><div class="att-present btn-attendance" style="width:26px;height:26px;font-size:11px">✔</div> Presente</span>
+                    <span class="flex items-center gap-1"><div class="att-absent btn-attendance" style="width:26px;height:26px;font-size:11px">✖</div> Ausente</span>
+                    <span class="flex items-center gap-1"><div class="att-new btn-attendance" style="width:26px;height:26px;font-size:11px">N</div> Nuevo</span>
+                    <span class="flex items-center gap-1"><div class="att-empty btn-attendance" style="width:26px;height:26px;font-size:11px">?</div> Sin marcar</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════ TAB 2: INFORME MENSUAL ════════ -->
+        <section id="view-report" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Formulario principal -->
+                <div class="lg:col-span-2 card p-4 md:p-8 border-t-8 border-orange-600">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-10 gap-3">
                         <div>
-                            <h2 class="text-base md:text-xl font-black text-slate-800 uppercase tracking-tighter" id="attCurrentMonthDisplay">Septiembre 2024</h2>
-                            <p class="text-sm text-slate-500">Control detallado de asistencia nominal</p>
+                            <h2 class="text-lg md:text-2xl font-black text-slate-800">FORMATO 2 – INFORME MENSUAL</h2>
+                            <p class="text-slate-400 text-sm">Sincronizado reactivamente con Firebase</p>
                         </div>
-                    </div>
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 no-print w-full md:w-auto">
-                        <!-- NUEVO SELECTOR DE PERIODO TIPO FECHA/MES -->
-                        <div class="flex flex-col">
-                            <label class="text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Seleccionar Periodo</label>
-                            <input type="month" id="attMonthSelector" onchange="changeAttendanceMonth()" class="p-2 border rounded-lg bg-white font-bold outline-none cursor-pointer focus:ring-2 focus:ring-orange-500">
-                        </div>
-                        <button onclick="exportAttendance()" class="bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-slate-900 transition-all flex items-center gap-2 self-end">
-                            <i class="fas fa-file-csv"></i> Exportar CSV
+                        <button onclick="exportMonthlyReport()" class="no-print bg-orange-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-orange-700 transition-all flex items-center gap-2 text-sm w-full sm:w-auto justify-center">
+                            <i class="fas fa-file-export"></i> Exportar Informe
                         </button>
                     </div>
-                </div>
 
-                <div class="card overflow-hidden">
-                    <div class="table-container overflow-x-auto">
-                        <table class="w-full text-left text-sm border-collapse">
-                            <thead>
-                                <tr class="bg-slate-50">
-                                    <th class="p-4 border-b font-bold w-64">Nombre del Joven</th>
-                                    <th class="p-4 border-b text-center">Sem 1</th>
-                                    <th class="p-4 border-b text-center">Sem 2</th>
-                                    <th class="p-4 border-b text-center">Sem 3</th>
-                                    <th class="p-4 border-b text-center">Sem 4</th>
-                                    <th class="p-4 border-b text-center">Sem 5</th>
-                                    <th class="p-4 border-b text-center bg-orange-50 text-orange-700 font-black">TOTAL</th>
-                                    <th class="p-4 border-b">Observación</th>
-                                </tr>
-                            </thead>
-                            <tbody id="attendanceBody" class="divide-y divide-slate-100">
-                                <!-- Datos JS -->
-                            </tbody>
-                        </table>
-                        <div id="emptyAttendance" class="p-12 text-center text-slate-400 italic">
-                            Agrega jóvenes en la Base Maestro para pasar asistencia.
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Secretario Responsable</label>
+                            <input type="text" id="repSecretario" placeholder="Nombre completo" class="w-full border-b-2 border-slate-100 py-2 font-bold outline-none focus:border-orange-500 transition-all">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Período</label>
+                            <input type="month" id="repPeriodo" class="w-full border-b-2 border-slate-100 py-2 font-bold outline-none focus:border-orange-500 transition-all">
                         </div>
                     </div>
-                    <div class="p-3 md:p-4 bg-slate-50 flex flex-wrap gap-3 md:gap-4 text-[10px] md:text-[11px] font-bold uppercase no-print">
-                        <span class="flex items-center gap-1.5"><div class="att-present btn-attendance">✔</div> Presente</span>
-                        <span class="flex items-center gap-1.5"><div class="att-absent btn-attendance">✖</div> Ausente</span>
-                        <span class="flex items-center gap-1.5"><div class="att-new btn-attendance">N</div> Nuevo</span>
-                        <span class="flex items-center gap-1.5"><div class="att-empty btn-attendance">?</div> Sin marcar</span>
+
+                    <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-3">
+                        <i class="fas fa-info-circle text-blue-500 mt-0.5 flex-shrink-0"></i>
+                        <p class="text-xs text-blue-700 font-medium">Los campos <strong>Asist.</strong> y <strong>Nuevos</strong> se sincronizan automáticamente desde la pestaña Asistencia. El Tema y las Decisiones se ingresan manualmente.</p>
                     </div>
-                </div>
-            </section>
 
-            <!-- FORMATO 2: INFORME MENSUAL -->
-            <section id="view-report" class="hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div class="lg:col-span-2 card p-4 md:p-8 border-t-8 border-orange-600">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 md:mb-10 gap-3">
-                            <div>
-                                <h2 class="text-lg md:text-2xl font-black text-slate-800">FORMATO 2 – INFORME MENSUAL</h2>
-                                <p class="text-slate-400 text-sm">Resumen estadístico de gestión ministerial</p>
-                            </div>
-                            <button onclick="exportMonthlyReport()" class="no-print bg-orange-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-orange-700 transition-all flex items-center gap-2 text-sm w-full sm:w-auto justify-center">
-                                <i class="fas fa-file-export"></i> Exportar Informe
-                            </button>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                            <div class="space-y-1">
-                                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Secretario Responsable</label>
-                                <input type="text" id="repSecretario" placeholder="Nombre completo" class="w-full border-b-2 border-slate-100 py-2 font-bold outline-none focus:border-orange-500 transition-all">
-                            </div>
-                            <div class="space-y-1">
-                                <label class="text-[11px] font-black text-slate-400 uppercase tracking-widest">Período</label>
-                                <input type="month" id="repPeriodo" class="w-full border-b-2 border-slate-100 py-2 font-bold outline-none focus:border-orange-500 transition-all">
-                            </div>
-                        </div>
-
-                        <div class="overflow-x-auto mb-8"><table class="w-full text-sm border border-slate-200 rounded-xl overflow-hidden min-w-[500px]">
+                    <div class="overflow-x-auto mb-8">
+                        <table class="w-full text-sm border border-slate-200 rounded-xl overflow-hidden min-w-[500px]">
                             <thead>
                                 <tr class="bg-slate-50 text-slate-600 border-b">
                                     <th class="p-4 border-r">Semana</th>
                                     <th class="p-4 border-r">Tema Predicado</th>
-                                    <th class="p-4 border-r text-center">Asist.</th>
-                                    <th class="p-4 border-r text-center">Nuevos</th>
+                                    <th class="p-4 border-r text-center">Asist. <span class="text-[9px] text-blue-500">AUTO</span></th>
+                                    <th class="p-4 border-r text-center">Nuevos <span class="text-[9px] text-blue-500">AUTO</span></th>
                                     <th class="p-4 text-center">Decis.</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr class="border-b row-report-data">
                                     <td class="p-4 border-r font-bold text-slate-500">Semana 1</td>
-                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema"></td>
-                                    <td class="p-4 border-r"><input type="number" onchange="updateMonthlyStats()" class="w-full text-center outline-none bg-transparent font-bold rep-asist"></td>
-                                    <td class="p-4 border-r"><input type="number" class="w-full text-center outline-none bg-transparent rep-nuevos"></td>
+                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema" placeholder="Tema…"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-asist cursor-default"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-nuevos cursor-default"></td>
                                     <td class="p-4"><input type="number" class="w-full text-center outline-none bg-transparent rep-decis"></td>
                                 </tr>
                                 <tr class="border-b row-report-data">
                                     <td class="p-4 border-r font-bold text-slate-500">Semana 2</td>
-                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema"></td>
-                                    <td class="p-4 border-r"><input type="number" onchange="updateMonthlyStats()" class="w-full text-center outline-none bg-transparent font-bold rep-asist"></td>
-                                    <td class="p-4 border-r"><input type="number" class="w-full text-center outline-none bg-transparent rep-nuevos"></td>
+                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema" placeholder="Tema…"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-asist cursor-default"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-nuevos cursor-default"></td>
                                     <td class="p-4"><input type="number" class="w-full text-center outline-none bg-transparent rep-decis"></td>
                                 </tr>
                                 <tr class="border-b row-report-data">
                                     <td class="p-4 border-r font-bold text-slate-500">Semana 3</td>
-                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema"></td>
-                                    <td class="p-4 border-r"><input type="number" onchange="updateMonthlyStats()" class="w-full text-center outline-none bg-transparent font-bold rep-asist"></td>
-                                    <td class="p-4 border-r"><input type="number" class="w-full text-center outline-none bg-transparent rep-nuevos"></td>
+                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema" placeholder="Tema…"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-asist cursor-default"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-nuevos cursor-default"></td>
                                     <td class="p-4"><input type="number" class="w-full text-center outline-none bg-transparent rep-decis"></td>
                                 </tr>
                                 <tr class="border-b row-report-data">
                                     <td class="p-4 border-r font-bold text-slate-500">Semana 4</td>
-                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema"></td>
-                                    <td class="p-4 border-r"><input type="number" onchange="updateMonthlyStats()" class="w-full text-center outline-none bg-transparent font-bold rep-asist"></td>
-                                    <td class="p-4 border-r"><input type="number" class="w-full text-center outline-none bg-transparent rep-nuevos"></td>
+                                    <td class="p-4 border-r"><input type="text" class="w-full outline-none bg-transparent rep-tema" placeholder="Tema…"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-asist cursor-default"></td>
+                                    <td class="p-4 border-r"><input type="number" readonly class="w-full text-center outline-none bg-blue-50 font-black text-blue-800 rounded-lg rep-nuevos cursor-default"></td>
                                     <td class="p-4"><input type="number" class="w-full text-center outline-none bg-transparent rep-decis"></td>
                                 </tr>
                             </tbody>
-                        </table></div>
-
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
-                            <div class="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
-                                <span class="text-[10px] font-black text-orange-600 block mb-1 uppercase tracking-widest">Bautismos</span>
-                                <input type="number" id="inp-bautismos" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-orange-900">
-                            </div>
-                            <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-                                <span class="text-[10px] font-black text-blue-600 block mb-1 uppercase tracking-widest">Al Servicio</span>
-                                <input type="number" id="inp-servicio" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-blue-900">
-                            </div>
-                            <div class="p-4 bg-red-50 border border-red-100 rounded-2xl">
-                                <span class="text-[10px] font-black text-red-600 block mb-1 uppercase tracking-widest">Alejados</span>
-                                <input type="number" id="inp-alejados" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-red-900">
-                            </div>
-                            <div class="p-4 bg-green-50 border border-green-100 rounded-2xl">
-                                <span class="text-[10px] font-black text-green-600 block mb-1 uppercase tracking-widest">Rescatados</span>
-                                <input type="number" id="inp-rescatados" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-green-900">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sidebar Análisis -->
-                    <div class="flex flex-col gap-6">
-                        <div class="card p-5 md:p-8 bg-slate-900 text-white">
-                            <h3 class="text-xl font-black text-orange-500 mb-6 flex items-center gap-2">
-                                <i class="fas fa-microchip"></i> ANÁLISIS AUTO
-                            </h3>
-                            <div class="space-y-6">
-                                <div class="flex justify-between items-end border-b border-slate-800 pb-4">
-                                    <div>
-                                        <p class="text-slate-400 text-xs font-bold uppercase">Jóvenes Activos</p>
-                                    </div>
-                                    <span class="text-3xl font-black text-white" id="rep-active">0</span>
-                                </div>
-                                <div class="flex justify-between items-end border-b border-slate-800 pb-4">
-                                    <div>
-                                        <p class="text-slate-400 text-xs font-bold uppercase">Promedio Mes</p>
-                                    </div>
-                                    <span class="text-3xl font-black text-white" id="rep-avg">0</span>
-                                </div>
-                            </div>
-                            <button onclick="window.print()" class="w-full mt-8 bg-orange-600 py-3.5 rounded-xl font-black shadow-lg no-print">
-                                GENERAR PDF OFICIAL
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- SECCIÓN: ESTRATEGIAS -->
-            <section id="view-strategy" class="hidden">
-                <!-- TABLA DE CRECIMIENTO HISTÓRICO -->
-                <div class="card p-4 md:p-8 mb-6 md:mb-8">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 md:mb-6 gap-3">
-                        <h3 class="text-lg md:text-2xl font-black text-slate-800 uppercase italic">Tabla de Crecimiento Histórico</h3>
-                        <button onclick="exportStrategy()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all border">
-                            <i class="fas fa-download mr-1"></i> Exportar Historial
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm border border-slate-200">
-                            <thead>
-                                <tr class="bg-slate-50 text-slate-600">
-                                    <th class="p-3 border text-left">Mes</th>
-                                    <th class="p-3 border text-center">Asist. Promedio</th>
-                                    <th class="p-3 border text-center">Nuevos</th>
-                                    <th class="p-3 border text-center">Bautismos</th>
-                                    <th class="p-3 border text-center">Total Miembros</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 strategy-data-rows">
-                                <tr><td class="p-3 border font-bold">Enero</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Febrero</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Marzo</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Abril</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Mayo</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Junio</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Julio</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Agosto</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold text-orange-600">Septiembre</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Octubre</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Noviembre</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                                <tr><td class="p-3 border font-bold">Diciembre</td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-avg"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-new"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-bau"></td><td class="p-3 border"><input type="number" class="w-full text-center outline-none bg-transparent h-month-tot"></td></tr>
-                            </tbody>
                         </table>
                     </div>
-                </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="card p-5 md:p-8 border-t-4 border-purple-600">
-                        <div class="bg-purple-100 w-12 h-12 rounded-xl flex items-center justify-center text-purple-600 mb-6">
-                            <i class="fas fa-users-slash text-xl"></i>
+                    <!-- Métricas clave -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+                        <div class="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
+                            <span class="text-[10px] font-black text-orange-600 block mb-1 uppercase tracking-widest">Bautismos</span>
+                            <input type="number" id="inp-bautismos" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-orange-900">
                         </div>
-                        <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Plan de Rescate</h3>
-                        <p class="text-slate-500 text-sm mb-4">Si los datos muestran bajas en asistencia:</p>
-                        <ul class="space-y-2 text-sm text-slate-600 italic">
-                            <li>- Llamadas inmediatas del líder asignado.</li>
-                            <li>- Visita relámpago en la semana.</li>
-                        </ul>
-                    </div>
-
-                    <div class="card p-5 md:p-8 border-t-4 border-green-600">
-                        <div class="bg-green-100 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 mb-6">
-                            <i class="fas fa-seedling text-xl"></i>
+                        <div class="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+                            <span class="text-[10px] font-black text-blue-600 block mb-1 uppercase tracking-widest">Al Servicio <span class="text-[8px] text-blue-400">AUTO</span></span>
+                            <input type="number" id="inp-servicio" value="0" readonly class="w-full bg-transparent text-2xl font-black outline-none text-blue-900 cursor-default">
                         </div>
-                        <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Estrategia Integración</h3>
-                        <p class="text-slate-500 text-sm mb-4">Si hay muchos nuevos pero baja retención:</p>
-                        <ul class="space-y-2 text-sm text-slate-600 italic">
-                            <li>- Kit de bienvenida físico/digital.</li>
-                            <li>- Seguimiento 24h vía WhatsApp.</li>
-                        </ul>
-                    </div>
-
-                    <div class="card p-5 md:p-8 border-t-4 border-blue-600">
-                        <div class="bg-blue-100 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-6">
-                            <i class="fas fa-tools text-xl"></i>
+                        <div class="p-4 bg-red-50 border border-red-100 rounded-2xl">
+                            <span class="text-[10px] font-black text-red-600 block mb-1 uppercase tracking-widest">Alejados <span class="text-[8px] text-red-400">AUTO</span></span>
+                            <input type="number" id="inp-alejados" value="0" readonly class="w-full bg-transparent text-2xl font-black outline-none text-red-900 cursor-default">
                         </div>
-                        <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Activación Servicio</h3>
-                        <p class="text-slate-500 text-sm mb-4">Si hay alta asistencia pero pocos sirviendo:</p>
-                        <ul class="space-y-2 text-sm text-slate-600 italic">
-                            <li>- Test de dones espirituales.</li>
-                            <li>- Talleres prácticos mensuales.</li>
-                        </ul>
+                        <div class="p-4 bg-green-50 border border-green-100 rounded-2xl">
+                            <span class="text-[10px] font-black text-green-600 block mb-1 uppercase tracking-widest">Rescatados</span>
+                            <input type="number" id="inp-rescatados" value="0" class="w-full bg-transparent text-2xl font-black outline-none text-green-900">
+                        </div>
                     </div>
                 </div>
-            </section>
-        </main>
-    </div>
 
-    <!-- MODAL REGISTRO MAESTRO -->
-    <div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-        <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div class="p-4 md:p-6 border-b flex justify-between items-center sticky top-0 bg-white z-20">
-                <div>
-                    <h2 class="text-xl md:text-2xl font-black text-slate-800">NUEVO MIEMBRO FIREGEN</h2>
-                    <p class="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">Formato 0 - Registro Maestro</p>
+                <!-- Sidebar análisis -->
+                <div class="flex flex-col gap-6">
+                    <div class="card p-5 md:p-8 bg-slate-900 text-white">
+                        <h3 class="text-xl font-black text-orange-500 mb-6 flex items-center gap-2">
+                            <i class="fas fa-microchip"></i> ANÁLISIS AUTO
+                        </h3>
+                        <div class="space-y-5">
+                            <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+                                <p class="text-slate-400 text-xs font-bold uppercase">Jóvenes Registrados</p>
+                                <span class="text-3xl font-black text-white" id="rep-active">0</span>
+                            </div>
+                            <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+                                <p class="text-slate-400 text-xs font-bold uppercase">Prom. Asistencia</p>
+                                <span class="text-3xl font-black text-white" id="rep-avg">0</span>
+                            </div>
+                            <div class="flex justify-between items-end border-b border-slate-800 pb-4">
+                                <p class="text-slate-400 text-xs font-bold uppercase">Total Nuevos Mes</p>
+                                <span class="text-3xl font-black text-green-400" id="rep-nuevos-total">0</span>
+                            </div>
+                            <div class="flex justify-between items-end pb-2">
+                                <p class="text-slate-400 text-xs font-bold uppercase">Al Servicio</p>
+                                <span class="text-3xl font-black text-orange-400" id="rep-servicio-total">0</span>
+                            </div>
+                        </div>
+                        <button onclick="window.print()" class="w-full mt-8 bg-orange-600 py-3.5 rounded-xl font-black shadow-lg no-print hover:bg-orange-500 transition-colors">
+                            GENERAR PDF OFICIAL
+                        </button>
+                    </div>
                 </div>
-                <button onclick="closeModal('userModal')" class="text-slate-400 hover:text-slate-600 transition-all p-2"><i class="fas fa-times text-2xl"></i></button>
             </div>
-            <form id="memberForm" class="p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-                <div class="md:col-span-2">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Nombre Completo</label>
-                    <input type="text" name="nombre" required class="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-500 outline-none transition-all">
+        </section>
+
+        <!-- ════════ TAB 3: ESTRATEGIAS ════════ -->
+        <section id="view-strategy" class="hidden">
+
+            <!-- V2.5: GRÁFICA DE CRECIMIENTO — responsive -->
+            <div id="chartCard" class="card p-5 md:p-8 mb-6 md:mb-8 rounded-2xl">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+                    <div>
+                        <h3 class="text-xl font-black flex items-center gap-2">
+                            <i class="fas fa-chart-area text-orange-400"></i>
+                            <span class="text-white">Gráfica de Crecimiento Ministerial</span>
+                        </h3>
+                        <p class="text-slate-400 text-sm mt-1">Tendencia de asistencia promedio y nuevos por mes</p>
+                    </div>
+                    <select id="chartYearSelect" onchange="refreshChart()" class="bg-slate-700 text-white border border-slate-600 rounded-xl px-4 py-2 font-bold outline-none focus:ring-2 focus:ring-orange-500 text-sm"></select>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Fecha Nacimiento</label>
-                    <input type="date" name="fechaNac" required class="w-full p-3.5 border border-slate-200 rounded-xl outline-none">
+                <div class="relative" style="height:280px;">
+                    <canvas id="growthChart"></canvas>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Teléfono</label>
-                    <input type="tel" name="telefono" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none">
+            </div>
+
+            <!-- V2.5: ANÁLISIS MINISTERIAL -->
+            <div class="card p-5 md:p-8 mb-6 md:mb-8">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                    <div>
+                        <h3 class="text-lg font-black text-slate-800 flex items-center gap-2">
+                            <i class="fas fa-brain text-purple-500"></i> Análisis Ministerial
+                        </h3>
+                        <p class="text-slate-400 text-sm">Observaciones sobre las tendencias del mes. Se guarda automáticamente en Firebase.</p>
+                    </div>
+                    <span id="analysisSaveBadge" class="auto-badge"><i class="fas fa-check-circle"></i> Guardado</span>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Redes Sociales</label>
-                    <input type="text" name="social" placeholder="@usuario" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none">
+                <div class="flex gap-3 mb-3 flex-wrap">
+                    <label class="text-xs font-bold text-slate-500 uppercase">Mes analizado:</label>
+                    <select id="analysisMonthSelect" onchange="loadAnalysis()" class="border border-slate-200 rounded-lg px-3 py-1 text-sm font-bold outline-none focus:ring-2 focus:ring-orange-500 bg-white"></select>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Estado Espiritual</label>
-                    <select name="estadoEspiritual" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none bg-white">
-                        <option>Nuevo</option>
-                        <option>Nuevo convertido</option>
-                        <option>En discipulado</option>
-                        <option>Bautizado</option>
-                        <option>Líder</option>
-                    </select>
+                <textarea id="analysisTextarea" class="w-full" placeholder="Describe aquí las subidas o bajadas en la asistencia este mes, decisiones tomadas, circunstancias especiales…"></textarea>
+            </div>
+
+            <!-- TABLA DE CRECIMIENTO HISTÓRICO -->
+            <div class="card p-4 md:p-8 mb-6 md:mb-8">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 md:mb-6 gap-3">
+                    <div>
+                        <h3 class="text-lg md:text-2xl font-black text-slate-800 uppercase italic">Tabla de Crecimiento Histórico</h3>
+                        <p class="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                            <i class="fas fa-lock text-slate-300"></i>
+                            Los datos fluyen automáticamente desde el Informe Mensual — solo lectura.
+                        </p>
+                    </div>
+                    <button onclick="exportStrategy()" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all border">
+                        <i class="fas fa-download mr-1"></i> Exportar Historial
+                    </button>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Área de Servicio</label>
-                    <input type="text" name="areaServicio" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border border-slate-200">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-600">
+                                <th class="p-3 border text-left">Mes</th>
+                                <th class="p-3 border text-center">Asist. Promedio</th>
+                                <th class="p-3 border text-center">Nuevos</th>
+                                <th class="p-3 border text-center">Bautismos</th>
+                                <th class="p-3 border text-center">Rescatados</th>
+                                <th class="p-3 border text-center">Total Miembros</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 strategy-data-rows" id="historicTbody">
+                            <!-- Generado en JS -->
+                        </tbody>
+                    </table>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Líder Asignado</label>
-                    <input type="text" name="lider" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Estado de Asistencia</label>
-                    <select name="estadoAsistencia" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none bg-white font-bold text-orange-600">
-                        <option>Activo</option>
-                        <option>Inconstante</option>
-                        <option>Enfriándose</option>
-                        <option>Alejado</option>
-                    </select>
+            </div>
+
+            <!-- Cards de estrategias + alertas de rescate -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="card p-5 md:p-8 border-t-4 border-purple-600">
+                    <div class="bg-purple-100 w-12 h-12 rounded-xl flex items-center justify-center text-purple-600 mb-6"><i class="fas fa-users-slash text-xl"></i></div>
+                    <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Plan de Rescate</h3>
+                    <p class="text-slate-500 text-sm mb-4">Si los datos muestran bajas en asistencia:</p>
+                    <ul class="space-y-2 text-sm text-slate-600 italic mb-4">
+                        <li>- Llamadas inmediatas del líder asignado.</li>
+                        <li>- Visita relámpago en la semana.</li>
+                    </ul>
+                    <!-- Panel de alertas V2 -->
+                    <div id="rescue-alerts-container" class="mt-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i class="fas fa-exclamation-triangle text-red-500 text-xs"></i>
+                            <span class="text-[10px] font-black text-red-600 uppercase tracking-widest">Alertas Activas</span>
+                            <span id="rescue-count-badge" class="ml-auto bg-red-100 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-full hidden">0</span>
+                        </div>
+                        <div id="rescue-alerts" class="space-y-2 max-h-48 overflow-y-auto">
+                            <p class="text-[11px] text-slate-400 italic">Sin alertas activas.</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="md:col-span-3 flex justify-end gap-3 mt-6 pt-6 border-t">
-                    <button type="button" onclick="closeModal('userModal')" class="px-8 py-3.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
-                    <button type="submit" class="px-10 py-3.5 bg-orange-600 text-white rounded-xl font-black shadow-lg hover:bg-orange-700 transition-all">GUARDAR</button>
+                <div class="card p-5 md:p-8 border-t-4 border-green-600">
+                    <div class="bg-green-100 w-12 h-12 rounded-xl flex items-center justify-center text-green-600 mb-6"><i class="fas fa-seedling text-xl"></i></div>
+                    <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Estrategia Integración</h3>
+                    <p class="text-slate-500 text-sm mb-4">Si hay muchos nuevos pero baja retención:</p>
+                    <ul class="space-y-2 text-sm text-slate-600 italic">
+                        <li>- Kit de bienvenida físico/digital.</li>
+                        <li>- Seguimiento 24h vía WhatsApp.</li>
+                    </ul>
                 </div>
-            </form>
+
+                <div class="card p-5 md:p-8 border-t-4 border-blue-600">
+                    <div class="bg-blue-100 w-12 h-12 rounded-xl flex items-center justify-center text-blue-600 mb-6"><i class="fas fa-tools text-xl"></i></div>
+                    <h3 class="text-lg font-black text-slate-800 mb-2 uppercase">Activación Servicio</h3>
+                    <p class="text-slate-500 text-sm mb-4">Si hay alta asistencia pero pocos sirviendo:</p>
+                    <ul class="space-y-2 text-sm text-slate-600 italic">
+                        <li>- Test de dones espirituales.</li>
+                        <li>- Talleres prácticos mensuales.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div><!-- /max-w -->
+
+<!-- ════════════════════ BOTTOM NAVIGATION MÓVIL ════════════════════ -->
+<nav id="bottomNav" class="no-print">
+    <div class="bottom-nav-inner">
+        <button class="bn-btn bn-active" id="bn-master" onclick="switchTab('master')">
+            <i class="fas fa-database"></i>
+            <span>Maestro</span>
+        </button>
+        <button class="bn-btn" id="bn-attendance" onclick="switchTab('attendance')">
+            <i class="fas fa-calendar-check"></i>
+            <span>Asistencia</span>
+        </button>
+        <button class="bn-btn" id="bn-report" onclick="switchTab('report')">
+            <i class="fas fa-chart-line"></i>
+            <span>Informe</span>
+        </button>
+        <button class="bn-btn" id="bn-strategy" onclick="switchTab('strategy')">
+            <i class="fas fa-bullseye"></i>
+            <span>Estrategias</span>
+        </button>
+    </div>
+</nav>
+
+<!-- ════════════════════ MODAL REGISTRO MAESTRO — V2.75 ════════════════════ -->
+<div id="userModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="p-4 md:p-6 border-b flex justify-between items-center sticky top-0 bg-white z-20">
+            <div>
+                <h2 class="text-xl md:text-2xl font-black text-slate-800" id="modalTitle">NUEVO MIEMBRO FIREGEN</h2>
+                <p class="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-widest">Formato 0 - Registro Maestro V2.75</p>
+            </div>
+            <button onclick="closeModal('userModal')" class="text-slate-400 hover:text-slate-600 transition-all p-2"><i class="fas fa-times text-2xl"></i></button>
+        </div>
+        <form id="memberForm" class="p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <input type="hidden" id="editMemberId">
+
+            <div class="md:col-span-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Nombre Completo *</label>
+                <input type="text" name="nombre" required class="w-full p-3.5 border border-slate-200 rounded-xl focus:ring-4 focus:ring-orange-100 focus:border-orange-500 outline-none transition-all">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Fecha de Nacimiento *</label>
+                <input type="date" name="fechaNac" required class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Teléfono</label>
+                <input type="tel" name="telefono" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Redes Sociales</label>
+                <input type="text" name="social" placeholder="@usuario" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Estado Espiritual</label>
+                <select name="estadoEspiritual" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none bg-white focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+                    <option>Nuevo</option>
+                    <option>Nuevo convertido</option>
+                    <option>En discipulado</option>
+                    <option>Bautizado</option>
+                    <option>Líder</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Área de Servicio</label>
+                <input type="text" name="areaServicio" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Cargo / Rol</label>
+                <input type="text" name="cargo" placeholder="Ej: Líder de Alabanza" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Líder Asignado</label>
+                <input type="text" name="lider" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Estado de Asistencia</label>
+                <select name="estadoAsistencia" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none bg-white font-bold text-orange-600 focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+                    <option>Activo</option>
+                    <option>Inconstante</option>
+                    <option>Enfriándose</option>
+                    <option>Alejado</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Fecha de Bautismo</label>
+                <input type="date" name="fechaBautismo" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500">
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2"><i class="fas fa-map-marker-alt text-orange-400 mr-1"></i>Domicilio</label>
+                <input type="text" name="domicilio" placeholder="Calle, Colonia, Ciudad" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500 transition-all">
+            </div>
+            <!-- V2.5/V2.75: Campo URL Foto Google Drive -->
+            <div class="md:col-span-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">
+                    <i class="fas fa-camera text-orange-400 mr-1"></i>URL Foto (Google Drive / cualquier URL directa)
+                </label>
+                <input type="url" name="fotoURL" id="fotoURLInput" placeholder="https://drive.google.com/uc?id=…" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500 transition-all">
+                <p class="text-[10px] text-slate-400 mt-1">Para Google Drive: usar enlace "Ver" y agregar <strong>?usp=sharing</strong> o usar la URL directa con <code>uc?id=</code></p>
+            </div>
+            <div class="flex items-center justify-center">
+                <div id="fotoPreviewWrap" class="relative w-24 h-24">
+                    <img id="fotoPreview" src="" alt="Vista previa" class="w-24 h-24 rounded-full object-cover border-4 border-orange-100 shadow-md hidden">
+                    <div id="fotoPreviewPlaceholder" class="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 border-2 border-dashed border-slate-200">
+                        <i class="fas fa-user text-3xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="md:col-span-3">
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2"><i class="fas fa-quote-left text-orange-400 mr-1"></i>Descripción Personal / Notas</label>
+                <textarea name="descripcionPersonal" rows="2" placeholder="Dones, situación actual, puntos de oración…" class="w-full p-3.5 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-500 transition-all resize-none"></textarea>
+            </div>
+
+            <div class="md:col-span-3 flex justify-end gap-3 mt-4 pt-6 border-t">
+                <button type="button" onclick="closeModal('userModal')" class="px-8 py-3.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all">Cancelar</button>
+                <button type="submit" class="px-10 py-3.5 bg-orange-600 text-white rounded-xl font-black shadow-lg hover:bg-orange-700 transition-all">GUARDAR</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ════════════════════ EXPEDIENTE DIGITAL — SLIDE-OVER ════════════════════ -->
+<div id="expedienteOverlay" onclick="handleExpedienteBackdropClick(event)">
+    <div class="exp-backdrop"></div>
+    <div class="exp-panel" id="expedientePanel">
+        <!-- Header degradado -->
+        <div class="bg-gradient-to-br from-slate-900 to-slate-800 p-6 pb-10 relative flex-shrink-0">
+            <button onclick="closeExpediente()" class="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="flex items-center gap-4">
+                <div id="expAvatar"></div>
+                <div class="min-w-0">
+                    <h2 class="text-xl font-black text-white leading-tight break-words" id="expNombre"></h2>
+                    <p class="text-orange-400 text-xs font-bold uppercase mt-0.5" id="expEstadoEspiritual"></p>
+                    <div class="mt-2">
+                        <span class="text-xs font-bold px-2 py-0.5 rounded-full" id="expEngagementBadge"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cuerpo -->
+        <div class="flex-1 p-6 space-y-4 overflow-y-auto">
+            <div>
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Datos Personales</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-50 rounded-xl p-3">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Edad</p>
+                        <p class="font-black text-slate-800 text-xl" id="expEdad">—</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-3">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">F. Nacimiento</p>
+                        <p class="font-bold text-slate-700 text-sm" id="expFechaNac">—</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-3">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Teléfono</p>
+                        <p class="font-bold text-slate-700 text-sm" id="expTelefono">—</p>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-3">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase">Redes</p>
+                        <p class="font-bold text-slate-700 text-sm" id="expSocial">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-orange-50 border border-orange-100 rounded-xl p-4">
+                <p class="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Ministerio</p>
+                <div class="flex justify-between gap-2">
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-bold">Área de Servicio</p>
+                        <p class="font-bold text-slate-800 text-sm" id="expArea">—</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] text-slate-400 font-bold">Cargo / Rol</p>
+                        <p class="font-bold text-slate-800 text-sm uppercase" id="expCargo">—</p>
+                    </div>
+                </div>
+                <div class="mt-2 flex justify-between gap-2">
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-bold">Líder Asignado</p>
+                        <p class="font-bold text-slate-800 text-sm uppercase" id="expLider">—</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] text-slate-400 font-bold">F. Bautismo</p>
+                        <p class="font-bold text-slate-700 text-sm" id="expFechaBautismo">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl p-4">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Domicilio</p>
+                <p class="font-medium text-slate-700 text-sm leading-snug" id="expDomicilio">—</p>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Notas</p>
+                <p class="text-slate-600 text-sm italic" id="expDesc">—</p>
+            </div>
+
+            <!-- Acciones rápidas -->
+            <div>
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Acciones Rápidas</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <a id="expWhatsapp" href="#" target="_blank" rel="noopener"
+                       class="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl py-3 text-sm transition-all">
+                        <i class="fab fa-whatsapp text-lg"></i> WhatsApp
+                    </a>
+                    <a id="expMaps" href="#" target="_blank" rel="noopener"
+                       class="flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl py-3 text-sm transition-all">
+                        <i class="fas fa-map-marked-alt"></i> Ver Ubicación
+                    </a>
+                </div>
+                <button onclick="editFromExpediente()" class="w-full mt-2 flex items-center justify-center gap-2 bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold rounded-xl py-3 text-sm transition-all">
+                    <i class="fas fa-edit"></i> Editar Miembro
+                </button>
+            </div>
         </div>
     </div>
+</div>
 
-    <script>
-        let members = [];
-        let currentAttData = {};
-        let currentAttNotes = {};
-        let currentAttPeriod = '';
-        let activeReportListener = null;
-        let activeStrategyListener = null;
+<!-- ════════════════════ V2.75: DIRECTORIO PROFESIONAL ════════════════════ -->
+<div id="directorioOverlay">
+    <div class="dir-header">
+        <div>
+            <h2 class="text-xl font-black text-white flex items-center gap-2">
+                <i class="fas fa-address-book text-orange-400"></i>
+                Directorio Ministerial
+            </h2>
+            <p class="text-slate-400 text-xs mt-0.5" id="dirCount">Cargando…</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                <input type="text" id="dirSearch" oninput="renderDirectorio()" placeholder="Buscar…" class="pl-8 pr-3 py-2 rounded-xl bg-slate-700 text-white text-sm outline-none border border-slate-600 focus:border-orange-400" style="width:160px;">
+            </div>
+            <button onclick="closeDirectorio()" class="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors ml-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+    <div class="dir-body" id="dirBody">
+        <!-- Generado en JS -->
+    </div>
+</div>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCVZVmF5SEoW7ytfdAd-5fRUi8_DCXp7Lg",
-            authDomain: "firegen-cd4b2.firebaseapp.com",
-            databaseURL: "https://firegen-cd4b2-default-rtdb.firebaseio.com",
-            projectId: "firegen-cd4b2",
-            storageBucket: "firegen-cd4b2.firebasestorage.app",
-            messagingSenderId: "888566194821",
-            appId: "1:888566194821:web:6b8815d3b2a0354a9bbfec"
+<!-- ════════════════════════ JAVASCRIPT ════════════════════════ -->
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════════
+let members            = [];
+let currentAttData     = {};
+let currentAttNotes    = {};
+let currentAttPeriod   = '';
+let activeReportListener   = null;
+let activeStrategyListener = null;
+let currentExpedienteFid   = null;
+let growthChart            = null;
+
+const MESES_LABELS  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_KEYS    = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+// ═══════════════════════════════════════════════════════════════
+// FIREBASE CONFIG
+// ═══════════════════════════════════════════════════════════════
+const firebaseConfig = {
+    apiKey:            "AIzaSyCVZVmF5SEoW7ytfdAd-5fRUi8_DCXp7Lg",
+    authDomain:        "firegen-cd4b2.firebaseapp.com",
+    databaseURL:       "https://firegen-cd4b2-default-rtdb.firebaseio.com",
+    projectId:         "firegen-cd4b2",
+    storageBucket:     "firegen-cd4b2.firebasestorage.app",
+    messagingSenderId: "888566194821",
+    appId:             "1:888566194821:web:6b8815d3b2a0354a9bbfec"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ═══════════════════════════════════════════════════════════════
+// INICIALIZACIÓN
+// ═══════════════════════════════════════════════════════════════
+window.onload = () => {
+    const now = new Date();
+    const cp  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+    document.getElementById('attMonthSelector').value = cp;
+    document.getElementById('repPeriodo').value        = cp;
+    updateAttDisplayDate();
+    buildHistoricTable();
+    initChartYearSelect();
+    initAnalysisMonthSelect();
+    initChart();
+
+    // ── Listener reactivo principal: MIEMBROS ──────────────────
+    db.ref('miembros').on('value', snap => {
+        const data = snap.val();
+        members = data ? Object.entries(data).map(([k,v])=>({...v,firebaseId:k})) : [];
+        members.sort((a,b) => a.nombre.localeCompare(b.nombre,'es'));
+
+        renderMaster();
+        updateStats();
+        renderAttendance();
+        syncServiceCounter();
+        syncAlejadosCounter();
+        loadRescueAlerts(cp);
+    });
+
+    syncAttendance(cp);
+    syncReport(cp);
+    bindReportInputs();
+    bindStrategyInputs();
+
+    // Preview foto en modal
+    document.getElementById('fotoURLInput').addEventListener('input', previewFoto);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// NAVEGACIÓN (tabs + bottom nav)
+// ═══════════════════════════════════════════════════════════════
+function switchTab(tab) {
+    ['master','attendance','report','strategy'].forEach(s => {
+        document.getElementById('view-'+s).classList.add('hidden');
+        const topBtn = document.getElementById('tab-'+s);
+        if (topBtn) { topBtn.classList.remove('tab-active'); }
+        const bnBtn  = document.getElementById('bn-'+s);
+        if (bnBtn)  { bnBtn.classList.remove('bn-active'); }
+    });
+    document.getElementById('view-'+tab).classList.remove('hidden');
+    const topActive = document.getElementById('tab-'+tab);
+    if (topActive) topActive.classList.add('tab-active');
+    const bnActive  = document.getElementById('bn-'+tab);
+    if (bnActive)  bnActive.classList.add('bn-active');
+
+    if (tab === 'attendance') renderAttendance();
+    if (tab === 'report')     updateMonthlyStats();
+    if (tab === 'strategy')   refreshChart();
+}
+function openModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function calculateAge(b){ if(!b) return 0; return Math.abs(new Date(Date.now()-new Date(b).getTime()).getUTCFullYear()-1970); }
+
+// ═══════════════════════════════════════════════════════════════
+// BASE MAESTRO — renderMaster (tabla desktop + cards móvil)
+// ═══════════════════════════════════════════════════════════════
+function renderMaster() {
+    const search   = document.getElementById('searchInput').value.toLowerCase();
+    const filtered = members.filter(m => m.nombre.toLowerCase().includes(search));
+
+    // ── Tabla Desktop ────────────────────────────────────────
+    const body  = document.getElementById('masterBody');
+    const empty = document.getElementById('emptyMaster');
+    body.innerHTML = '';
+    empty.classList.toggle('hidden', filtered.length > 0);
+
+    filtered.forEach((m, i) => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-slate-50 transition-colors';
+        row.innerHTML = `
+            <td class="p-4 font-bold text-slate-400 text-sm">${i+1}</td>
+            <td class="p-4">
+                <button class="member-name-btn" onclick="openExpediente('${m.firebaseId}')">${m.nombre}</button>
+            </td>
+            <td class="p-4 text-slate-600">${calculateAge(m.fechaNac)} años</td>
+            <td class="p-4">
+                <div class="text-xs font-bold text-blue-600">${m.telefono||'—'}</div>
+                <div class="text-[10px] text-slate-400 italic">${m.social||''}</div>
+            </td>
+            <td class="p-4"><span class="status-badge ${getStatusClass(m.estadoEspiritual)}">${m.estadoEspiritual}</span></td>
+            <td class="p-4 text-xs text-slate-600">${m.areaServicio||'—'}</td>
+            <td class="p-4 font-bold text-slate-500 uppercase text-xs">${m.lider||'—'}</td>
+            <td class="p-4"><span class="status-badge ${getEngagementClass(m.estadoAsistencia)}">${m.estadoAsistencia||'Activo'}</span></td>
+            <td class="p-4 no-print">
+                <div class="flex items-center gap-2">
+                    <button onclick="openExpediente('${m.firebaseId}')" title="Ver Perfil"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-orange-100 text-slate-400 hover:text-orange-600 transition-all">
+                        <i class="fas fa-eye text-xs"></i>
+                    </button>
+                    <button onclick="editMember('${m.firebaseId}')" title="Editar"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-orange-100 text-slate-400 hover:text-orange-600 transition-all">
+                        <i class="fas fa-pencil-alt text-xs"></i>
+                    </button>
+                    <button onclick="deleteMember('${m.firebaseId}')" title="Eliminar"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 transition-all">
+                        <i class="fas fa-trash text-xs"></i>
+                    </button>
+                </div>
+            </td>`;
+        body.appendChild(row);
+    });
+
+    // ── Lista Móvil ──────────────────────────────────────────
+    const mobileList   = document.getElementById('masterMobileList');
+    const mobileEmpty  = document.getElementById('emptyMasterMobile');
+    // Eliminar tarjetas anteriores (pero no el emptyMasterMobile)
+    Array.from(mobileList.children).forEach(c => { if (c.id !== 'emptyMasterMobile') c.remove(); });
+    mobileEmpty.classList.toggle('hidden', filtered.length > 0);
+
+    filtered.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'mobile-member-card';
+        const photoHtml = m.fotoURL
+            ? `<img src="${m.fotoURL}" class="mobile-member-photo" onerror="this.outerHTML='<div class=\\'mobile-member-photo-ph\\'>${(m.nombre||'?').charAt(0).toUpperCase()}</div>'" alt="Foto">`
+            : `<div class="mobile-member-photo-ph">${(m.nombre||'?').charAt(0).toUpperCase()}</div>`;
+        const edad = calculateAge(m.fechaNac);
+        const phone = (m.telefono||'').replace(/\D/g,'');
+        card.innerHTML = `
+            ${photoHtml}
+            <div class="mobile-member-info">
+                <div class="mobile-member-name">${m.nombre}</div>
+                <div class="mobile-member-sub">${edad} años · ${m.areaServicio||'Sin área'}</div>
+                <div class="flex flex-wrap gap-1 mt-1">
+                    <span class="status-badge ${getStatusClass(m.estadoEspiritual)}" style="font-size:0.6rem;padding:2px 6px">${m.estadoEspiritual}</span>
+                    <span class="status-badge ${getEngagementClass(m.estadoAsistencia)}" style="font-size:0.6rem;padding:2px 6px">${m.estadoAsistencia||'Activo'}</span>
+                </div>
+                <div class="mobile-member-actions">
+                    <button onclick="openExpediente('${m.firebaseId}')" class="flex items-center gap-1 text-[11px] font-bold bg-orange-50 text-orange-600 px-2 py-1 rounded-lg border border-orange-100">
+                        <i class="fas fa-eye text-[10px]"></i> Ver
+                    </button>
+                    <button onclick="editMember('${m.firebaseId}')" class="flex items-center gap-1 text-[11px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
+                        <i class="fas fa-pencil-alt text-[10px]"></i> Editar
+                    </button>
+                    ${phone ? `<a href="https://api.whatsapp.com/send?phone=${phone}" target="_blank" rel="noopener" class="flex items-center gap-1 text-[11px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded-lg border border-green-100"><i class="fab fa-whatsapp text-[10px]"></i> WA</a>` : ''}
+                    <button onclick="deleteMember('${m.firebaseId}')" class="flex items-center gap-1 text-[11px] font-bold bg-red-50 text-red-600 px-2 py-1 rounded-lg">
+                        <i class="fas fa-trash text-[10px]"></i>
+                    </button>
+                </div>
+            </div>`;
+        mobileList.appendChild(card);
+    });
+
+    updateStats();
+}
+
+function getStatusClass(s)    { if(s==='Líder') return 'bg-purple-100 text-purple-700'; if(s==='Bautizado') return 'bg-blue-100 text-blue-700'; if(s==='Nuevo') return 'bg-orange-100 text-orange-700'; return 'bg-slate-100 text-slate-600'; }
+function getEngagementClass(s){ if(s==='Activo') return 'eng-activo'; if(s==='Inconstante') return 'eng-inconstante'; if(s==='Enfriándose') return 'eng-enfriando'; if(s==='Alejado') return 'eng-alejado'; return 'bg-slate-100 text-slate-600'; }
+function filterMaster()       { renderMaster(); }
+
+// ═══════════════════════════════════════════════════════════════
+// ASISTENCIA POR PERIODO
+// ═══════════════════════════════════════════════════════════════
+function syncAttendance(periodo) {
+    if (currentAttPeriod) db.ref('asistencias/'+currentAttPeriod).off('value');
+    currentAttPeriod = periodo;
+    currentAttData = {}; currentAttNotes = {};
+
+    db.ref('asistencias/'+periodo).on('value', snap => {
+        const d = snap.val() || {};
+        currentAttData = {}; currentAttNotes = {};
+        Object.keys(d).forEach(fid => {
+            currentAttData[fid]  = d[fid].semanas || [3,3,3,3,3];
+            currentAttNotes[fid] = d[fid].nota    || '';
+        });
+        renderAttendance();
+        pushAttendanceToReport();
+    });
+}
+
+function renderAttendance() {
+    const periodo = document.getElementById('attMonthSelector').value;
+
+    // ── Tabla Desktop ──────────────────────────────────────
+    const body    = document.getElementById('attendanceBody');
+    const empty   = document.getElementById('emptyAttendance');
+    body.innerHTML = '';
+    if (!members.length) { empty.classList.remove('hidden'); } else { empty.classList.add('hidden'); }
+
+    members.forEach(m => {
+        const sem   = currentAttData[m.firebaseId] || [3,3,3,3,3];
+        const nota  = currentAttNotes[m.firebaseId] || '';
+        const total = sem.reduce((a,s) => a + (s===1||s===2 ? 1:0), 0);
+        const row   = document.createElement('tr');
+        let c = `<td class="p-4 font-bold text-slate-800">${m.nombre}</td>`;
+        sem.forEach((st,i) => {
+            c += `<td class="p-4 text-center"><div onclick="toggleAtt('${m.firebaseId}',${i},'${periodo}')" class="btn-attendance mx-auto ${getAttClass(st)}">${getAttIcon(st)}</div></td>`;
+        });
+        c += `<td class="p-4 text-center bg-orange-50 font-black text-orange-700 text-lg">${total}</td>`;
+        c += `<td class="p-4"><input type="text" value="${nota}" oninput="saveAttNote('${m.firebaseId}','${periodo}',this.value)" class="w-full bg-transparent outline-none text-xs italic text-slate-400" placeholder="Nota..."></td>`;
+        row.innerHTML = c;
+        body.appendChild(row);
+    });
+
+    // ── Lista Móvil ────────────────────────────────────────
+    const mobileList  = document.getElementById('attendanceMobileList');
+    const mobileEmpty = document.getElementById('emptyAttendanceMobile');
+    // Eliminar tarjetas anteriores (pero no las legendas ni emptyMobile)
+    Array.from(mobileList.children).forEach(c => {
+        if (!c.classList.contains('flex') && c.id !== 'emptyAttendanceMobile') c.remove();
+    });
+
+    if (!members.length) {
+        mobileEmpty.classList.remove('hidden');
+        return;
+    }
+    mobileEmpty.classList.add('hidden');
+
+    members.forEach(m => {
+        const sem   = currentAttData[m.firebaseId] || [3,3,3,3,3];
+        const total = sem.reduce((a,s) => a + (s===1||s===2 ? 1:0), 0);
+        const card  = document.createElement('div');
+        card.className = 'mobile-att-card';
+        let weeksHtml = '';
+        sem.forEach((st,i) => {
+            weeksHtml += `<div onclick="toggleAtt('${m.firebaseId}',${i},'${periodo}')" class="btn-attendance ${getAttClass(st)}" style="width:30px;height:30px;font-size:12px">${getAttIcon(st)}</div>`;
+        });
+        card.innerHTML = `
+            <div class="mobile-att-info">
+                <div class="mobile-att-name">${m.nombre}</div>
+                <div class="mobile-att-label">Semanas →</div>
+                <div class="mobile-att-weeks">${weeksHtml}
+                    <div class="btn-attendance" style="width:30px;height:30px;font-size:11px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;font-weight:900">${total}</div>
+                </div>
+                <input type="text" value="${currentAttNotes[m.firebaseId]||''}" oninput="saveAttNote('${m.firebaseId}','${periodo}',this.value)"
+                    class="w-full bg-transparent outline-none text-xs italic text-slate-400 mt-2 border-b border-dashed border-slate-200" placeholder="Observación…">
+            </div>`;
+        mobileList.appendChild(card);
+    });
+}
+
+function toggleAtt(fid, week, periodo) {
+    const sem   = (currentAttData[fid] || [3,3,3,3,3]).slice();
+    sem[week]   = (sem[week] + 1) % 4;
+    currentAttData[fid] = sem;
+    db.ref('asistencias/'+periodo+'/'+fid).update({ semanas: sem });
+    updateEngagementStatus(fid);
+    flashBadge('attSyncBadge');
+    renderAttendance();
+}
+function saveAttNote(fid, periodo, val) {
+    db.ref('asistencias/'+periodo+'/'+fid).update({ nota: val });
+}
+function getAttClass(s){ return s===1?'att-present':s===0?'att-absent':s===2?'att-new':'att-empty'; }
+function getAttIcon(s) { return s===1?'✔':s===0?'✖':s===2?'N':'?'; }
+function changeAttendanceMonth() {
+    updateAttDisplayDate();
+    syncAttendance(document.getElementById('attMonthSelector').value);
+}
+function updateAttDisplayDate() {
+    const v = document.getElementById('attMonthSelector').value; if(!v) return;
+    const [y,m] = v.split('-');
+    document.getElementById('attCurrentMonthDisplay').innerText =
+        new Date(y,m-1).toLocaleString('es-ES',{month:'long'})+' '+y;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// V2.5 — ASISTENCIA → INFORME: sincronización automática
+// ═══════════════════════════════════════════════════════════════
+function pushAttendanceToReport() {
+    const periodo = document.getElementById('repPeriodo') ? document.getElementById('repPeriodo').value : currentAttPeriod;
+    if (!periodo || periodo !== currentAttPeriod) return;
+
+    const presentes = [0,0,0,0,0];
+    const nuevos    = [0,0,0,0,0];
+    members.forEach(m => {
+        const sem = currentAttData[m.firebaseId] || [3,3,3,3,3];
+        sem.forEach((s,i) => {
+            if (s === 1) presentes[i]++;
+            if (s === 2) { presentes[i]++; nuevos[i]++; }
+        });
+    });
+
+    const rows = document.querySelectorAll('.row-report-data');
+    const updates = {};
+    rows.forEach((row, i) => {
+        row.querySelector('.rep-asist').value  = presentes[i] || '';
+        row.querySelector('.rep-nuevos').value = nuevos[i]    || '';
+        updates[`sem${i+1}/asist`]  = presentes[i] || 0;
+        updates[`sem${i+1}/nuevos`] = nuevos[i]    || 0;
+    });
+    if (periodo) db.ref('informes/'+periodo).update(updates);
+    updateMonthlyStats();
+    flashBadge('attSyncBadge');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INFORME MENSUAL POR PERIODO
+// ═══════════════════════════════════════════════════════════════
+function syncReport(periodo) {
+    if (activeReportListener) db.ref('informes/'+activeReportListener).off('value');
+    activeReportListener = periodo;
+    clearReportFields();
+
+    db.ref('informes/'+periodo).on('value', snap => {
+        const d = snap.val(); if (!d) return;
+        if (d.secretario !== undefined) document.getElementById('repSecretario').value = d.secretario;
+
+        document.querySelectorAll('.row-report-data').forEach((row, i) => {
+            const sk = 'sem'+(i+1); if (!d[sk]) return;
+            row.querySelector('.rep-tema').value   = d[sk].tema   || '';
+            row.querySelector('.rep-asist').value  = d[sk].asist  || '';
+            row.querySelector('.rep-nuevos').value = d[sk].nuevos || '';
+            row.querySelector('.rep-decis').value  = d[sk].decis  || '';
+        });
+        if (d.bautismos  !== undefined) document.getElementById('inp-bautismos').value  = d.bautismos;
+        if (d.servicio   !== undefined) { document.getElementById('inp-servicio').value  = d.servicio; document.getElementById('rep-servicio-total').innerText = d.servicio; }
+        if (d.alejados   !== undefined) document.getElementById('inp-alejados').value   = d.alejados;
+        if (d.rescatados !== undefined) document.getElementById('inp-rescatados').value = d.rescatados;
+        updateMonthlyStats();
+        syncHistoricalFromReport(periodo, d);
+    });
+}
+function clearReportFields() {
+    document.getElementById('repSecretario').value = '';
+    document.querySelectorAll('.row-report-data').forEach(r => {
+        r.querySelector('.rep-tema').value=''; r.querySelector('.rep-asist').value='';
+        r.querySelector('.rep-nuevos').value=''; r.querySelector('.rep-decis').value='';
+    });
+    ['inp-bautismos','inp-servicio','inp-alejados','inp-rescatados'].forEach(id => document.getElementById(id).value = 0);
+    updateMonthlyStats();
+}
+function saveReportField(field, val) {
+    const p = document.getElementById('repPeriodo').value; if(!p) return;
+    const u = {}; u[field] = val; db.ref('informes/'+p).update(u);
+}
+function saveReportRow(idx) {
+    const p   = document.getElementById('repPeriodo').value; if(!p) return;
+    const row = document.querySelectorAll('.row-report-data')[idx];
+    db.ref('informes/'+p+'/sem'+(idx+1)).update({
+        tema:   row.querySelector('.rep-tema').value,
+        asist:  parseInt(row.querySelector('.rep-asist').value)  || 0,
+        nuevos: parseInt(row.querySelector('.rep-nuevos').value) || 0,
+        decis:  parseInt(row.querySelector('.rep-decis').value)  || 0
+    });
+    updateMonthlyStats();
+}
+function bindReportInputs() {
+    document.getElementById('repSecretario').addEventListener('input', function(){ saveReportField('secretario', this.value); });
+    document.getElementById('repPeriodo').addEventListener('change', function(){ syncReport(this.value); });
+    document.querySelectorAll('.row-report-data').forEach((row, i) => {
+        row.querySelector('.rep-tema').addEventListener('input',  () => saveReportRow(i));
+        row.querySelector('.rep-decis').addEventListener('input', () => saveReportRow(i));
+    });
+    document.getElementById('inp-bautismos').addEventListener('input', function(){
+        saveReportField('bautismos', parseInt(this.value)||0);
+        const p = document.getElementById('repPeriodo').value;
+        if (p) syncHistoricalFromReport(p, { bautismos: parseInt(this.value)||0 });
+    });
+    document.getElementById('inp-rescatados').addEventListener('input', function(){
+        saveReportField('rescatados', parseInt(this.value)||0);
+        const p = document.getElementById('repPeriodo').value;
+        if (p) syncHistoricalFromReport(p, { rescatados: parseInt(this.value)||0 });
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ESTRATEGIAS (listener + solo lectura tabla histórica)
+// ═══════════════════════════════════════════════════════════════
+function buildHistoricTable() {
+    const tbody = document.getElementById('historicTbody');
+    MESES_LABELS.forEach((mes, i) => {
+        const tr = document.createElement('tr');
+        tr.id = 'hist-row-'+i;
+        tr.innerHTML = `
+            <td class="p-3 border font-bold text-slate-700">${mes}</td>
+            <td class="p-3 border text-center" id="h-avg-${i}"><span class="hist-readonly">—</span></td>
+            <td class="p-3 border text-center" id="h-new-${i}"><span class="hist-readonly">—</span></td>
+            <td class="p-3 border text-center" id="h-bau-${i}"><span class="hist-readonly">—</span></td>
+            <td class="p-3 border text-center" id="h-res-${i}"><span class="hist-readonly">—</span></td>
+            <td class="p-3 border text-center" id="h-tot-${i}"><span class="hist-readonly">—</span></td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+function setHistoricCell(col, monthIdx, val) {
+    const el = document.getElementById(`h-${col}-${monthIdx}`);
+    if (el) el.innerHTML = `<span class="hist-readonly">${val !== undefined && val !== '' ? val : '—'}</span>`;
+}
+
+function syncHistoricalFromReport(periodo, data) {
+    if (!periodo) return;
+    const [year, monthStr] = periodo.split('-');
+    const mi = parseInt(monthStr, 10) - 1;
+
+    if (data.bautismos  !== undefined) setHistoricCell('bau', mi, data.bautismos);
+    if (data.rescatados !== undefined) setHistoricCell('res', mi, data.rescatados);
+
+    setHistoricCell('tot', mi, members.length);
+
+    if (periodo === (document.getElementById('repPeriodo') ? document.getElementById('repPeriodo').value : '')) {
+        let sum = 0, cnt = 0;
+        document.querySelectorAll('.rep-asist').forEach(inp => { const v=parseInt(inp.value); if(v>0){sum+=v;cnt++;} });
+        if (cnt > 0) setHistoricCell('avg', mi, Math.round(sum/cnt));
+
+        let totalNuevos = 0;
+        document.querySelectorAll('.rep-nuevos').forEach(inp => { totalNuevos += parseInt(inp.value)||0; });
+        setHistoricCell('new', mi, totalNuevos);
+    }
+
+    const mesKey = MESES_KEYS[mi];
+    if (mesKey && activeStrategyListener) {
+        const avgEl = document.getElementById(`h-avg-${mi}`);
+        const newEl = document.getElementById(`h-new-${mi}`);
+        const bauEl = document.getElementById(`h-bau-${mi}`);
+        const resEl = document.getElementById(`h-res-${mi}`);
+        const u = {};
+        u[mesKey] = {
+            avg: avgEl ? (avgEl.innerText === '—' ? 0 : parseInt(avgEl.innerText)||0) : 0,
+            nw:  newEl ? (newEl.innerText === '—' ? 0 : parseInt(newEl.innerText)||0) : 0,
+            bau: bauEl ? (bauEl.innerText === '—' ? 0 : parseInt(bauEl.innerText)||0) : 0,
+            res: resEl ? (resEl.innerText === '—' ? 0 : parseInt(resEl.innerText)||0) : 0,
+            tot: members.length
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        db.ref('estrategias/'+activeStrategyListener).update(u);
+    }
+    refreshChart();
+}
 
-        window.onload = () => {
-            const now = new Date();
-            const cp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-            document.getElementById('attMonthSelector').value = cp;
-            document.getElementById('repPeriodo').value = cp;
-            updateAttDisplayDate();
+function bindStrategyInputs() {
+    // Tabla histórica es solo lectura — no hay inputs manuales
+}
 
-            // 1. MIEMBROS - ordenamiento alfabético
-            db.ref('miembros').on('value', (snap) => {
-                const data = snap.val();
-                members = data ? Object.entries(data).map(([k,v])=>({...v,firebaseId:k})) : [];
-                members.sort((a,b) => a.nombre.localeCompare(b.nombre,'es'));
-                renderMaster();
-                updateStats();
-                renderAttendance();
-            });
+function syncStrategy(periodo) {
+    if (activeStrategyListener) db.ref('estrategias/'+activeStrategyListener).off('value');
+    activeStrategyListener = periodo;
 
-            // 2-4. Cargar periodo actual
-            syncAttendance(cp);
-            syncReport(cp);
-            syncStrategy(cp);
-            bindReportInputs();
-            bindStrategyInputs();
-        };
+    db.ref('estrategias/'+periodo).on('value', snap => {
+        const d = snap.val(); if (!d) return;
+        MESES_KEYS.forEach((mes, i) => {
+            if (!d[mes]) return;
+            setHistoricCell('avg', i, d[mes].avg || '—');
+            setHistoricCell('new', i, d[mes].nw  || '—');
+            setHistoricCell('bau', i, d[mes].bau || '—');
+            setHistoricCell('res', i, d[mes].res || '—');
+            setHistoricCell('tot', i, d[mes].tot || '—');
+        });
+        refreshChart();
+    });
+}
 
-        // === NAVEGACIÓN ===
-        function switchTab(tab) {
-            ['master','attendance','report','strategy'].forEach(s => {
-                document.getElementById('view-'+s).classList.add('hidden');
-                document.getElementById('tab-'+s).classList.remove('tab-active');
-            });
-            document.getElementById('view-'+tab).classList.remove('hidden');
-            document.getElementById('tab-'+tab).classList.add('tab-active');
-            if(tab==='attendance') renderAttendance();
-            if(tab==='report') updateMonthlyStats();
-        }
-        function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
-        function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
-        function calculateAge(b){ if(!b)return 0; return Math.abs(new Date(Date.now()-new Date(b).getTime()).getUTCFullYear()-1970); }
+// ═══════════════════════════════════════════════════════════════
+// ESTADÍSTICAS
+// ═══════════════════════════════════════════════════════════════
+function updateStats() {
+    document.getElementById('stat-total').innerText      = members.length;
+    document.getElementById('stat-lideres').innerText    = members.filter(m=>m.estadoEspiritual==='Líder').length;
+    document.getElementById('stat-bautizados').innerText = members.filter(m=>m.estadoEspiritual==='Bautizado').length;
+    document.getElementById('stat-riesgo').innerText     = members.filter(m=>m.estadoAsistencia!=='Activo').length;
+}
+function updateMonthlyStats() {
+    document.getElementById('rep-active').innerText = members.length;
+    let sum=0, cnt=0, totalNuevos=0;
+    document.querySelectorAll('.rep-asist').forEach(inp => { const v=parseInt(inp.value); if(v>0){sum+=v;cnt++;} });
+    document.querySelectorAll('.rep-nuevos').forEach(inp => { totalNuevos += parseInt(inp.value)||0; });
+    document.getElementById('rep-avg').innerText          = cnt > 0 ? Math.round(sum/cnt) : 0;
+    document.getElementById('rep-nuevos-total').innerText = totalNuevos;
+}
 
-        // === BASE MAESTRO ===
-        function renderMaster() {
-            const body = document.getElementById('masterBody');
-            const search = document.getElementById('searchInput').value.toLowerCase();
-            const empty = document.getElementById('emptyMaster');
-            body.innerHTML = '';
-            const filtered = members.filter(m => m.nombre.toLowerCase().includes(search));
-            empty.classList.toggle('hidden', filtered.length > 0);
-            filtered.forEach((m,i) => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-slate-50';
-                row.innerHTML = `
-                    <td class="p-4 font-bold text-slate-400">${i+1}</td>
-                    <td class="p-4 font-bold text-slate-800">${m.nombre}</td>
-                    <td class="p-4">${calculateAge(m.fechaNac)} años</td>
-                    <td class="p-4"><div class="text-xs font-bold text-blue-600">${m.telefono||''}</div><div class="text-[10px] text-slate-400 italic">${m.social||''}</div></td>
-                    <td class="p-4"><span class="status-badge ${getStatusClass(m.estadoEspiritual)}">${m.estadoEspiritual}</span></td>
-                    <td class="p-4 text-xs">${m.areaServicio||'-'}</td>
-                    <td class="p-4 font-bold text-slate-500 uppercase text-xs">${m.lider||''}</td>
-                    <td class="p-4"><span class="status-badge ${m.estadoAsistencia==='Activo'?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}">${m.estadoAsistencia}</span></td>
-                    <td class="p-4 no-print"><button onclick="deleteMember('${m.firebaseId}')" class="text-slate-300 hover:text-red-600 transition-colors"><i class="fas fa-trash"></i></button></td>`;
-                body.appendChild(row);
-            });
-            updateStats();
-        }
-        function getStatusClass(s){ if(s==='Líder')return'bg-purple-100 text-purple-700';if(s==='Bautizado')return'bg-blue-100 text-blue-700';if(s==='Nuevo')return'bg-orange-100 text-orange-700';return'bg-slate-100 text-slate-600'; }
-        function filterMaster(){ renderMaster(); }
+// ═══════════════════════════════════════════════════════════════
+// CONTADORES AUTOMÁTICOS HACIA EL INFORME
+// ═══════════════════════════════════════════════════════════════
+function syncServiceCounter() {
+    const count = members.filter(m =>
+        (m.areaServicio && m.areaServicio.trim() !== '' && m.areaServicio.trim().toLowerCase() !== 'ninguna') ||
+        m.estadoEspiritual === 'Líder'
+    ).length;
+    document.getElementById('inp-servicio').value = count;
+    document.getElementById('rep-servicio-total').innerText = count;
+    const p = document.getElementById('repPeriodo').value;
+    if (p) db.ref('informes/'+p).update({ servicio: count });
+}
 
-        // === ASISTENCIA POR PERIODO ===
-        function syncAttendance(periodo) {
-            if(currentAttPeriod) db.ref('asistencias/'+currentAttPeriod).off('value');
-            currentAttPeriod = periodo;
-            currentAttData = {};
-            currentAttNotes = {};
-            db.ref('asistencias/'+periodo).on('value', (snap) => {
-                const d = snap.val() || {};
-                currentAttData = {}; currentAttNotes = {};
-                Object.keys(d).forEach(fid => {
-                    currentAttData[fid] = d[fid].semanas || [3,3,3,3,3];
-                    currentAttNotes[fid] = d[fid].nota || '';
-                });
-                renderAttendance();
-            });
-        }
-        function renderAttendance() {
-            const body = document.getElementById('attendanceBody');
-            const empty = document.getElementById('emptyAttendance');
-            const periodo = document.getElementById('attMonthSelector').value;
-            body.innerHTML = '';
-            if(!members.length){ empty.classList.remove('hidden'); return; }
-            empty.classList.add('hidden');
-            members.forEach(m => {
-                const sem = currentAttData[m.firebaseId] || [3,3,3,3,3];
-                const nota = currentAttNotes[m.firebaseId] || '';
-                const total = sem.reduce((a,s)=>a+(s===1||s===2?1:0),0);
-                const row = document.createElement('tr');
-                let c = `<td class="p-4 font-bold">${m.nombre}</td>`;
-                sem.forEach((st,i) => {
-                    c += `<td class="p-4 text-center"><div onclick="toggleAtt('${m.firebaseId}',${i},'${periodo}')" class="btn-attendance mx-auto ${getAttClass(st)}">${getAttIcon(st)}</div></td>`;
-                });
-                c += `<td class="p-4 text-center bg-orange-50 font-black text-orange-700 text-lg">${total}</td>`;
-                c += `<td class="p-4"><input type="text" value="${nota}" oninput="saveAttNote('${m.firebaseId}','${periodo}',this.value)" class="w-full bg-transparent outline-none text-xs italic text-slate-400" placeholder="Nota..."></td>`;
-                row.innerHTML = c;
-                body.appendChild(row);
-            });
-        }
-        function toggleAtt(fid, week, periodo) {
-            const sem = (currentAttData[fid]||[3,3,3,3,3]).slice();
-            sem[week] = (sem[week]+1)%4;
-            currentAttData[fid] = sem;
-            db.ref('asistencias/'+periodo+'/'+fid).update({semanas:sem});
-        }
-        function saveAttNote(fid, periodo, val) {
-            db.ref('asistencias/'+periodo+'/'+fid).update({nota:val});
-        }
-        function getAttClass(s){ return s===1?'att-present':s===0?'att-absent':s===2?'att-new':'att-empty'; }
-        function getAttIcon(s){ return s===1?'✔':s===0?'✖':s===2?'N':'?'; }
-        function changeAttendanceMonth() {
-            updateAttDisplayDate();
-            syncAttendance(document.getElementById('attMonthSelector').value);
-        }
-        function updateAttDisplayDate() {
-            const v = document.getElementById('attMonthSelector').value; if(!v) return;
-            const [y,m] = v.split('-');
-            document.getElementById('attCurrentMonthDisplay').innerText = new Date(y,m-1).toLocaleString('es-ES',{month:'long'})+' '+y;
+function syncAlejadosCounter() {
+    const alejados = members.filter(m => m.estadoAsistencia === 'Alejado').length;
+    document.getElementById('inp-alejados').value = alejados;
+    const p = document.getElementById('repPeriodo').value;
+    if (p) db.ref('informes/'+p).update({ alejados });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORMULARIO — CRUD EXTENDIDO
+// ═══════════════════════════════════════════════════════════════
+function openNewMemberModal() {
+    document.getElementById('memberForm').reset();
+    document.getElementById('editMemberId').value = '';
+    document.getElementById('modalTitle').textContent = 'NUEVO MIEMBRO FIREGEN';
+    document.getElementById('fotoPreview').classList.add('hidden');
+    document.getElementById('fotoPreviewPlaceholder').classList.remove('hidden');
+    openModal('userModal');
+}
+function editMember(fid) {
+    const m = members.find(x => x.firebaseId === fid);
+    if (!m) return;
+    const form = document.getElementById('memberForm');
+    form.reset();
+    document.getElementById('editMemberId').value = fid;
+    document.getElementById('modalTitle').textContent = 'EDITAR MIEMBRO';
+
+    form.querySelector('[name="nombre"]').value              = m.nombre              || '';
+    form.querySelector('[name="fechaNac"]').value            = m.fechaNac            || '';
+    form.querySelector('[name="telefono"]').value            = m.telefono            || '';
+    form.querySelector('[name="social"]').value              = m.social              || '';
+    form.querySelector('[name="estadoEspiritual"]').value    = m.estadoEspiritual    || 'Nuevo';
+    form.querySelector('[name="areaServicio"]').value        = m.areaServicio        || '';
+    form.querySelector('[name="cargo"]').value               = m.cargo               || '';
+    form.querySelector('[name="lider"]').value               = m.lider               || '';
+    form.querySelector('[name="estadoAsistencia"]').value    = m.estadoAsistencia    || 'Activo';
+    form.querySelector('[name="fechaBautismo"]').value       = m.fechaBautismo       || '';
+    form.querySelector('[name="domicilio"]').value           = m.domicilio           || '';
+    form.querySelector('[name="fotoURL"]').value             = m.fotoURL             || '';
+    form.querySelector('[name="descripcionPersonal"]').value = m.descripcionPersonal || '';
+
+    const preview     = document.getElementById('fotoPreview');
+    const placeholder = document.getElementById('fotoPreviewPlaceholder');
+    if (m.fotoURL) { preview.src = m.fotoURL; preview.classList.remove('hidden'); placeholder.classList.add('hidden'); }
+    else           { preview.classList.add('hidden'); placeholder.classList.remove('hidden'); }
+
+    openModal('userModal');
+}
+function editFromExpediente() {
+    closeExpediente();
+    if (currentExpedienteFid) editMember(currentExpedienteFid);
+}
+
+document.getElementById('memberForm').onsubmit = function(e) {
+    e.preventDefault();
+    const fd     = new FormData(this);
+    const editId = document.getElementById('editMemberId').value;
+    const payload = {
+        nombre:              fd.get('nombre'),
+        fechaNac:            fd.get('fechaNac'),
+        telefono:            fd.get('telefono'),
+        social:              fd.get('social'),
+        estadoEspiritual:    fd.get('estadoEspiritual'),
+        areaServicio:        fd.get('areaServicio'),
+        cargo:               fd.get('cargo'),
+        lider:               fd.get('lider'),
+        estadoAsistencia:    fd.get('estadoAsistencia'),
+        fechaBautismo:       fd.get('fechaBautismo'),
+        domicilio:           fd.get('domicilio'),
+        fotoURL:             fd.get('fotoURL'),
+        descripcionPersonal: fd.get('descripcionPersonal')
+    };
+    if (editId) {
+        db.ref('miembros/'+editId).set(payload);
+    } else {
+        db.ref('miembros').push(payload);
+    }
+    this.reset(); closeModal('userModal');
+};
+
+function deleteMember(fid) { if (confirm('¿Eliminar este registro permanentemente?')) db.ref('miembros/'+fid).remove(); }
+
+function previewFoto() {
+    const val         = document.getElementById('fotoURLInput').value;
+    const preview     = document.getElementById('fotoPreview');
+    const placeholder = document.getElementById('fotoPreviewPlaceholder');
+    if (val) { preview.src = val; preview.classList.remove('hidden'); placeholder.classList.add('hidden'); }
+    else     { preview.classList.add('hidden'); placeholder.classList.remove('hidden'); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPEDIENTE DIGITAL — SLIDE-OVER
+// ═══════════════════════════════════════════════════════════════
+function openExpediente(fid) {
+    const m = members.find(x => x.firebaseId === fid);
+    if (!m) return;
+    currentExpedienteFid = fid;
+
+    const avatarEl = document.getElementById('expAvatar');
+    if (m.fotoURL) {
+        avatarEl.innerHTML = `<img src="${m.fotoURL}" alt="Foto" class="exp-avatar" onerror="this.parentElement.innerHTML='<div class=\\'exp-avatar-placeholder\\'>${(m.nombre||'?').charAt(0).toUpperCase()}</div>'">`;
+    } else {
+        avatarEl.innerHTML = `<div class="exp-avatar-placeholder">${(m.nombre||'?').charAt(0).toUpperCase()}</div>`;
+    }
+
+    document.getElementById('expNombre').textContent           = m.nombre || '—';
+    document.getElementById('expEstadoEspiritual').textContent = m.estadoEspiritual || '—';
+
+    const badge = document.getElementById('expEngagementBadge');
+    badge.textContent = m.estadoAsistencia || 'Activo';
+    badge.className   = 'text-xs font-bold px-3 py-1 rounded-full ' + getEngagementClass(m.estadoAsistencia||'Activo');
+
+    document.getElementById('expEdad').textContent = m.fechaNac ? calculateAge(m.fechaNac)+' años' : '—';
+    if (m.fechaNac) {
+        const [y,mo,d] = m.fechaNac.split('-');
+        document.getElementById('expFechaNac').textContent = `${d}/${mo}/${y}`;
+    } else { document.getElementById('expFechaNac').textContent = '—'; }
+
+    document.getElementById('expTelefono').textContent = m.telefono || '—';
+    document.getElementById('expSocial').textContent   = m.social   || '—';
+    document.getElementById('expArea').textContent     = m.areaServicio || '—';
+    document.getElementById('expCargo').textContent    = m.cargo        || '—';
+    document.getElementById('expLider').textContent    = m.lider        || '—';
+    document.getElementById('expDomicilio').textContent = m.domicilio || 'Sin domicilio registrado';
+    document.getElementById('expDesc').textContent      = m.descripcionPersonal || 'Sin notas.';
+
+    // Fecha de bautismo
+    if (m.fechaBautismo) {
+        const [y,mo,d] = m.fechaBautismo.split('-');
+        document.getElementById('expFechaBautismo').textContent = `${d}/${mo}/${y}`;
+    } else { document.getElementById('expFechaBautismo').textContent = '—'; }
+
+    // WhatsApp
+    const phone  = (m.telefono||'').replace(/\D/g,'');
+    const waLink = document.getElementById('expWhatsapp');
+    if (phone) {
+        waLink.href = `https://api.whatsapp.com/send?phone=${phone}&text=Hola%20${encodeURIComponent(m.nombre)}%2C%20te%20contactamos%20del%20ministerio%20FireGen.`;
+        waLink.classList.remove('opacity-50','pointer-events-none');
+    } else { waLink.href='#'; waLink.classList.add('opacity-50','pointer-events-none'); }
+
+    // Maps
+    const mapsLink = document.getElementById('expMaps');
+    if (m.domicilio) {
+        mapsLink.href = `https://www.google.com/maps/search/${encodeURIComponent(m.domicilio)}`;
+        mapsLink.classList.remove('opacity-50','pointer-events-none');
+    } else { mapsLink.href='#'; mapsLink.classList.add('opacity-50','pointer-events-none'); }
+
+    document.getElementById('expedienteOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+function closeExpediente() {
+    document.getElementById('expedienteOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+    currentExpedienteFid = null;
+}
+function handleExpedienteBackdropClick(e) {
+    if (e.target.classList.contains('exp-backdrop') || e.target === document.getElementById('expedienteOverlay')) closeExpediente();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// V2.75 — DIRECTORIO PROFESIONAL (pantalla completa)
+// ═══════════════════════════════════════════════════════════════
+function openDirectorio() {
+    renderDirectorio();
+    document.getElementById('directorioOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+function closeDirectorio() {
+    document.getElementById('directorioOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+function renderDirectorio() {
+    const query  = (document.getElementById('dirSearch').value || '').toLowerCase();
+    const filtered = members.filter(m => m.nombre.toLowerCase().includes(query));
+    const body   = document.getElementById('dirBody');
+    const count  = document.getElementById('dirCount');
+    count.textContent = `${filtered.length} jóvenes registrados`;
+    body.innerHTML = '';
+
+    if (!filtered.length) {
+        body.innerHTML = `<div class="text-center py-20 text-slate-400 italic">No hay resultados para "${query}"</div>`;
+        return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
+
+    filtered.forEach(m => {
+        const card  = document.createElement('div');
+        card.className = 'dir-card';
+        const edad  = calculateAge(m.fechaNac);
+        const phone = (m.telefono||'').replace(/\D/g,'');
+        const waUrl = phone
+            ? `https://api.whatsapp.com/send?phone=${phone}&text=Hola%20${encodeURIComponent(m.nombre)}%2C%20saludos%20del%20ministerio%20FireGen.`
+            : null;
+        const photoHtml = m.fotoURL
+            ? `<img src="${m.fotoURL}" class="dir-photo" onerror="this.outerHTML='<div class=\\'dir-photo-placeholder\\'>${(m.nombre||'?').charAt(0).toUpperCase()}</div>'" alt="Foto">`
+            : `<div class="dir-photo-placeholder">${(m.nombre||'?').charAt(0).toUpperCase()}</div>`;
+
+        // Fecha bautismo
+        let bautismoStr = '';
+        if (m.fechaBautismo) {
+            const [y,mo,d] = m.fechaBautismo.split('-');
+            bautismoStr = `· Bautizado ${d}/${mo}/${y}`;
         }
 
-        // === INFORME MENSUAL POR PERIODO ===
-        function syncReport(periodo) {
-            if(activeReportListener) db.ref('informes/'+activeReportListener).off('value');
-            activeReportListener = periodo;
-            clearReportFields();
-            db.ref('informes/'+periodo).on('value', (snap) => {
-                const d = snap.val(); if(!d) return;
-                if(d.secretario!==undefined) document.getElementById('repSecretario').value=d.secretario;
-                document.querySelectorAll('.row-report-data').forEach((row,i) => {
-                    const sk='sem'+(i+1); if(!d[sk])return;
-                    row.querySelector('.rep-tema').value=d[sk].tema||'';
-                    row.querySelector('.rep-asist').value=d[sk].asist||'';
-                    row.querySelector('.rep-nuevos').value=d[sk].nuevos||'';
-                    row.querySelector('.rep-decis').value=d[sk].decis||'';
-                });
-                if(d.bautismos!==undefined) document.getElementById('inp-bautismos').value=d.bautismos;
-                if(d.servicio!==undefined) document.getElementById('inp-servicio').value=d.servicio;
-                if(d.alejados!==undefined) document.getElementById('inp-alejados').value=d.alejados;
-                if(d.rescatados!==undefined) document.getElementById('inp-rescatados').value=d.rescatados;
-                updateMonthlyStats();
-            });
-        }
-        function clearReportFields() {
-            document.getElementById('repSecretario').value='';
-            document.querySelectorAll('.row-report-data').forEach(r=>{r.querySelector('.rep-tema').value='';r.querySelector('.rep-asist').value='';r.querySelector('.rep-nuevos').value='';r.querySelector('.rep-decis').value='';});
-            ['inp-bautismos','inp-servicio','inp-alejados','inp-rescatados'].forEach(id=>document.getElementById(id).value=0);
-            updateMonthlyStats();
-        }
-        function saveReportField(field, val) {
-            const p=document.getElementById('repPeriodo').value; if(!p)return;
-            const u={}; u[field]=val; db.ref('informes/'+p).update(u);
-        }
-        function saveReportRow(idx) {
-            const p=document.getElementById('repPeriodo').value; if(!p)return;
-            const row=document.querySelectorAll('.row-report-data')[idx];
-            db.ref('informes/'+p+'/sem'+(idx+1)).update({
-                tema:row.querySelector('.rep-tema').value, asist:row.querySelector('.rep-asist').value||0,
-                nuevos:row.querySelector('.rep-nuevos').value||0, decis:row.querySelector('.rep-decis').value||0
-            });
-            updateMonthlyStats();
-        }
-        function bindReportInputs() {
-            document.getElementById('repSecretario').addEventListener('input', function(){ saveReportField('secretario',this.value); });
-            document.getElementById('repPeriodo').addEventListener('change', function(){ syncReport(this.value); });
-            document.querySelectorAll('.row-report-data').forEach((row,i)=>{
-                row.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>saveReportRow(i)));
-            });
-            ['bautismos','servicio','alejados','rescatados'].forEach(f=>{
-                document.getElementById('inp-'+f).addEventListener('input', function(){ saveReportField(f,parseInt(this.value)||0); });
-            });
-        }
+        card.innerHTML = `
+            ${photoHtml}
+            <div class="dir-info">
+                <div class="dir-name">${m.nombre}</div>
+                <div class="dir-meta">
+                    <span>${edad} años</span>
+                    ${m.domicilio ? `<span>· ${m.domicilio}</span>` : ''}
+                </div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                    <span class="dir-badge ${getStatusClass(m.estadoEspiritual)}">${m.estadoEspiritual}</span>
+                    <span class="dir-badge ${getEngagementClass(m.estadoAsistencia)}">${m.estadoAsistencia||'Activo'}</span>
+                </div>
+                <div class="dir-spirit">
+                    ${m.areaServicio ? `<i class="fas fa-church text-orange-400 text-[10px]"></i> ${m.areaServicio}` : ''}
+                    ${m.cargo ? ` · <strong>${m.cargo}</strong>` : ''}
+                    ${bautismoStr}
+                </div>
+                ${waUrl ? `<a href="${waUrl}" target="_blank" rel="noopener" class="dir-wa-btn"><i class="fab fa-whatsapp"></i> ${m.telefono}</a>` : (m.telefono ? `<span class="dir-wa-btn" style="background:#94a3b8;cursor:default">${m.telefono}</span>` : '')}
+            </div>`;
+        grid.appendChild(card);
+    });
 
-        // === ESTRATEGIAS POR PERIODO ===
-        function syncStrategy(periodo) {
-            if(activeStrategyListener) db.ref('estrategias/'+activeStrategyListener).off('value');
-            activeStrategyListener = periodo;
-            clearStrategyFields();
-            db.ref('estrategias/'+periodo).on('value', (snap) => {
-                const d = snap.val(); if(!d)return;
-                const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-                const avgs=document.querySelectorAll('.h-month-avg'), nws=document.querySelectorAll('.h-month-new'), bau=document.querySelectorAll('.h-month-bau'), tot=document.querySelectorAll('.h-month-tot');
-                meses.forEach((mes,i)=>{ if(!d[mes])return; avgs[i].value=d[mes].avg||''; nws[i].value=d[mes].nw||''; bau[i].value=d[mes].bau||''; tot[i].value=d[mes].tot||''; });
-            });
-        }
-        function clearStrategyFields(){ document.querySelectorAll('.h-month-avg,.h-month-new,.h-month-bau,.h-month-tot').forEach(el=>el.value=''); }
-        function saveStrategyRow(idx) {
-            const p=activeStrategyListener; if(!p)return;
-            const meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-            const avgs=document.querySelectorAll('.h-month-avg'), nws=document.querySelectorAll('.h-month-new'), bau=document.querySelectorAll('.h-month-bau'), tot=document.querySelectorAll('.h-month-tot');
-            const u={}; u[meses[idx]]={avg:avgs[idx].value||0, nw:nws[idx].value||0, bau:bau[idx].value||0, tot:tot[idx].value||0};
-            db.ref('estrategias/'+p).update(u);
-        }
-        function bindStrategyInputs() {
-            document.querySelectorAll('.strategy-data-rows tr').forEach((tr,i)=>{
-                tr.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>saveStrategyRow(i)));
-            });
-        }
+    body.appendChild(grid);
+}
 
-        // === ESTADÍSTICAS ===
-        function updateStats() {
-            document.getElementById('stat-total').innerText=members.length;
-            document.getElementById('stat-lideres').innerText=members.filter(m=>m.estadoEspiritual==='Líder').length;
-            document.getElementById('stat-bautizados').innerText=members.filter(m=>m.estadoEspiritual==='Bautizado').length;
-            document.getElementById('stat-riesgo').innerText=members.filter(m=>m.estadoAsistencia!=='Activo').length;
-        }
-        function updateMonthlyStats() {
-            document.getElementById('rep-active').innerText=members.length;
-            let sum=0,count=0;
-            document.querySelectorAll('.rep-asist').forEach(inp=>{ if(inp.value>0){sum+=parseInt(inp.value);count++;} });
-            document.getElementById('rep-avg').innerText=count>0?Math.round(sum/count):0;
-        }
+// ═══════════════════════════════════════════════════════════════
+// MOTOR DE ENGAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function updateEngagementStatus(memberId) {
+    const now = new Date();
+    const periodos = [];
+    for (let i = 0; i < 2; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+        periodos.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    }
+    Promise.all(periodos.map(p => db.ref('asistencias/'+p+'/'+memberId).once('value'))).then(snaps => {
+        let allWeeks = [];
+        snaps.forEach(snap => {
+            const d   = snap.val();
+            const sem = (d && d.semanas) ? d.semanas : [3,3,3,3,3];
+            allWeeks  = allWeeks.concat(sem);
+        });
+        const last8  = allWeeks.slice(0, 8);
+        const total  = last8.filter(s=>s!==3).length;
+        const present= last8.filter(s=>s===1||s===2).length;
+        const pct    = total > 0 ? present/Math.min(total,8) : 0;
 
-        // === FORMULARIO ===
-        document.getElementById('memberForm').onsubmit = function(e) {
-            e.preventDefault();
-            const fd = new FormData(this);
-            db.ref('miembros').push({
-                nombre:fd.get('nombre'), fechaNac:fd.get('fechaNac'), telefono:fd.get('telefono'),
-                social:fd.get('social'), estadoEspiritual:fd.get('estadoEspiritual'),
-                areaServicio:fd.get('areaServicio'), lider:fd.get('lider'), estadoAsistencia:fd.get('estadoAsistencia')
-            });
-            this.reset(); closeModal('userModal');
-        };
-        function deleteMember(fid){ if(confirm('¿Eliminar registro?')) db.ref('miembros/'+fid).remove(); }
+        const recent     = snaps[0].val();
+        const prevSnap   = snaps[1] && snaps[1].val();
+        const recentWeeks= recent  && recent.semanas  ? recent.semanas  : [3,3,3,3,3];
+        const prevWeeks  = prevSnap && prevSnap.semanas? prevSnap.semanas: [3,3,3,3,3];
+        const asistio21  = recentWeeks.filter(s=>s!==3).slice(-3).some(s=>s===1||s===2);
+        const asistio60  = [...recentWeeks,...prevWeeks].filter(s=>s!==3).slice(-8).some(s=>s===1||s===2);
 
-        // === EXPORTACIÓN ===
-        function downloadCSV(csv,fn){ const b=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const l=document.createElement('a'); l.href=URL.createObjectURL(b); l.setAttribute('download',fn); document.body.appendChild(l); l.click(); document.body.removeChild(l); }
-        function exportMaster() {
-            if(!members.length)return; let csv="ID,Nombre,Edad,Telefono,Social,Estado Espiritual,Area Servicio,Lider,Estatus Asistencia\n";
-            members.forEach((m,i)=>{ csv+=`${i+1},"${m.nombre}",${calculateAge(m.fechaNac)},"${m.telefono}","${m.social}","${m.estadoEspiritual}","${m.areaServicio}","${m.lider}","${m.estadoAsistencia}"\n`; });
-            downloadCSV(csv,"FireGen_BaseMaestro.csv");
+        let nuevoEstado = 'Activo';
+        if (!asistio60)      nuevoEstado = 'Alejado';
+        else if (!asistio21) nuevoEstado = 'Enfriándose';
+        else if (pct < 0.5)  nuevoEstado = 'Inconstante';
+
+        const mo = members.find(x => x.firebaseId === memberId);
+        if (mo && mo.estadoAsistencia !== nuevoEstado) {
+            db.ref('miembros/'+memberId).update({ estadoAsistencia: nuevoEstado });
+            if (nuevoEstado === 'Alejado') triggerRetentionAlert(mo);
         }
-        function exportAttendance() {
-            if(!members.length)return; const period=document.getElementById('attMonthSelector').value;
-            let csv=`Control Asistencia - Periodo ${period}\nNombre,Semana 1,Semana 2,Semana 3,Semana 4,Semana 5,Total Mes\n`;
-            members.forEach(m=>{ const sem=currentAttData[m.firebaseId]||[3,3,3,3,3]; const r=[m.nombre,...sem.map(getAttIcon)]; r.push(sem.reduce((a,s)=>a+(s===1||s===2?1:0),0)); csv+=`"${r.join('","')}"\n`; });
-            downloadCSV(csv,`FireGen_Asistencia_${period}.csv`);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO DE RETENCIÓN
+// ═══════════════════════════════════════════════════════════════
+function triggerRetentionAlert(member) {
+    const periodo = document.getElementById('repPeriodo').value || activeReportListener;
+    if (!periodo) return;
+    const alertKey = 'alertasRescate/'+periodo+'/'+member.firebaseId;
+    db.ref(alertKey).once('value').then(snap => {
+        if (snap.exists()) return;
+        db.ref(alertKey).set({ nombre: member.nombre, telefono: member.telefono||'', timestamp: Date.now() });
+        addRescueChip(member.firebaseId, member.nombre, member.telefono||'');
+    });
+}
+function addRescueChip(fid, nombre, telefono) {
+    const container = document.getElementById('rescue-alerts');
+    const badge     = document.getElementById('rescue-count-badge');
+    const emptyMsg  = container.querySelector('p');
+    if (emptyMsg) emptyMsg.remove();
+    if (document.getElementById('chip-'+fid)) return;
+
+    const phone = (telefono||'').replace(/\D/g,'');
+    const waUrl = phone ? `https://api.whatsapp.com/send?phone=${phone}&text=Hola%20${encodeURIComponent(nombre)}%2C%20te%20extra%C3%B1amos%20en%20FireGen.` : '#';
+    const chip  = document.createElement('div');
+    chip.id = 'chip-'+fid; chip.className = 'rescue-chip';
+    chip.innerHTML = `
+        <div class="flex-1 min-w-0">
+            <p class="chip-name truncate">${nombre}</p>
+            <p class="chip-phone">${telefono||'Sin teléfono'}</p>
+        </div>
+        ${phone ? `<a href="${waUrl}" target="_blank" rel="noopener" class="flex-shrink-0 bg-green-500 text-white rounded-lg p-1.5 hover:bg-green-600 transition-colors"><i class="fab fa-whatsapp text-sm"></i></a>` : ''}`;
+    container.appendChild(chip);
+    const count = container.querySelectorAll('.rescue-chip').length;
+    badge.textContent = count; badge.classList.remove('hidden');
+}
+function loadRescueAlerts(periodo) {
+    db.ref('alertasRescate/'+periodo).once('value').then(snap => {
+        const data = snap.val(); if (!data) return;
+        Object.entries(data).forEach(([fid, info]) => addRescueChip(fid, info.nombre, info.telefono||''));
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GRÁFICA DE CRECIMIENTO (Chart.js — responsive)
+// ═══════════════════════════════════════════════════════════════
+function initChartYearSelect() {
+    const sel  = document.getElementById('chartYearSelect');
+    const now  = new Date();
+    const year = now.getFullYear();
+    for (let y = year; y >= year-3; y--) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y;
+        sel.appendChild(opt);
+    }
+}
+
+function initChart() {
+    const ctx = document.getElementById('growthChart').getContext('2d');
+    // Etiquetas cortas para móvil
+    const isMobile = window.innerWidth < 768;
+    const labels   = isMobile
+        ? ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+        : MESES_LABELS;
+
+    growthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label:           'Asistencia Promedio',
+                    data:            new Array(12).fill(null),
+                    borderColor:     '#f97316',
+                    backgroundColor: 'rgba(249,115,22,0.15)',
+                    borderWidth:     3,
+                    pointBackgroundColor: '#f97316',
+                    pointRadius:     isMobile ? 3 : 5,
+                    tension:         0.4,
+                    fill:            true
+                },
+                {
+                    label:           'Nuevos',
+                    data:            new Array(12).fill(null),
+                    borderColor:     '#22d3ee',
+                    backgroundColor: 'rgba(34,211,238,0.10)',
+                    borderWidth:     2,
+                    pointBackgroundColor: '#22d3ee',
+                    pointRadius:     isMobile ? 3 : 4,
+                    tension:         0.4,
+                    fill:            true
+                },
+                {
+                    label:           'Bautismos',
+                    data:            new Array(12).fill(null),
+                    borderColor:     '#a78bfa',
+                    backgroundColor: 'rgba(167,139,250,0.08)',
+                    borderWidth:     2,
+                    borderDash:      [6,4],
+                    pointBackgroundColor: '#a78bfa',
+                    pointRadius:     isMobile ? 3 : 4,
+                    tension:         0.4,
+                    fill:            false
+                }
+            ]
+        },
+        options: {
+            responsive:          true,
+            maintainAspectRatio: false,
+            interaction:         { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#94a3b8',
+                        font: { family: 'Inter', weight: '700', size: isMobile ? 9 : 11 },
+                        boxWidth: isMobile ? 10 : 14
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleColor:      '#f97316',
+                    bodyColor:       '#e2e8f0'
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#64748b', font: { size: isMobile ? 8 : 10 }, maxRotation: isMobile ? 45 : 0 }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#64748b', font: { size: isMobile ? 9 : 10 } },
+                    beginAtZero: true
+                }
+            }
         }
-        function exportMonthlyReport() {
-            const per=document.getElementById('repPeriodo').value||'S_P'; let csv=`INFORME MENSUAL FIREGEN - ${per}\nSemana,Tema,Asistencia,Nuevos,Decisiones\n`;
-            document.querySelectorAll('.row-report-data').forEach((row,i)=>{ csv+=`Semana ${i+1},"${row.querySelector('.rep-tema').value}",${row.querySelector('.rep-asist').value||0},${row.querySelector('.rep-nuevos').value||0},${row.querySelector('.rep-decis').value||0}\n`; });
-            csv+=`\nMETRICAS CLAVE\nBautismos,${document.getElementById('inp-bautismos').value}\nAl Servicio,${document.getElementById('inp-servicio').value}\nAlejados,${document.getElementById('inp-alejados').value}\nRescatados,${document.getElementById('inp-rescatados').value}\nPromedio,${document.getElementById('rep-avg').innerText}\n`;
-            downloadCSV(csv,`FireGen_InformeMensual_${per}.csv`);
-        }
-        function exportStrategy() {
-            let csv="Mes,Asistencia Promedio,Nuevos,Bautismos,Total Miembros\n";
-            const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-            const a=document.querySelectorAll('.h-month-avg'),n=document.querySelectorAll('.h-month-new'),b=document.querySelectorAll('.h-month-bau'),t=document.querySelectorAll('.h-month-tot');
-            months.forEach((m,i)=>{ csv+=`${m},${a[i].value||0},${n[i].value||0},${b[i].value||0},${t[i].value||0}\n`; });
-            downloadCSV(csv,"FireGen_CrecimientoHistorico.csv");
-        }
-    </script>
+    });
+}
+
+function refreshChart() {
+    if (!growthChart) return;
+    const year = parseInt(document.getElementById('chartYearSelect').value) || new Date().getFullYear();
+
+    db.ref('estrategias/'+year).once('value').then(snap => {
+        const d   = snap.val() || {};
+        const avg = [], nw = [], bau = [];
+        MESES_KEYS.forEach(mes => {
+            avg.push(d[mes] ? (parseInt(d[mes].avg)||null) : null);
+            nw.push( d[mes] ? (parseInt(d[mes].nw) ||null) : null);
+            bau.push(d[mes] ? (parseInt(d[mes].bau)||null) : null);
+        });
+        growthChart.data.datasets[0].data = avg;
+        growthChart.data.datasets[1].data = nw;
+        growthChart.data.datasets[2].data = bau;
+        growthChart.update('active');
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANÁLISIS MINISTERIAL
+// ═══════════════════════════════════════════════════════════════
+function initAnalysisMonthSelect() {
+    const sel  = document.getElementById('analysisMonthSelect');
+    const now  = new Date();
+    for (let i = 0; i < 12; i++) {
+        const d    = new Date(now.getFullYear(), now.getMonth()-i, 1);
+        const val  = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const label= d.toLocaleString('es-ES',{month:'long', year:'numeric'});
+        const opt  = document.createElement('option');
+        opt.value  = val; opt.textContent = label.charAt(0).toUpperCase()+label.slice(1);
+        sel.appendChild(opt);
+    }
+    loadAnalysis();
+
+    let debouncer;
+    document.getElementById('analysisTextarea').addEventListener('input', function() {
+        clearTimeout(debouncer);
+        debouncer = setTimeout(() => saveAnalysis(), 800);
+    });
+}
+
+function loadAnalysis() {
+    const mes = document.getElementById('analysisMonthSelect').value;
+    db.ref('analisis/'+mes).once('value').then(snap => {
+        document.getElementById('analysisTextarea').value = snap.val() || '';
+    });
+}
+function saveAnalysis() {
+    const mes  = document.getElementById('analysisMonthSelect').value;
+    const text = document.getElementById('analysisTextarea').value;
+    db.ref('analisis/'+mes).set(text).then(() => flashBadge('analysisSaveBadge'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTILIDADES
+// ═══════════════════════════════════════════════════════════════
+function flashBadge(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXPORTACIÓN CSV (preservadas de versiones anteriores)
+// ═══════════════════════════════════════════════════════════════
+function downloadCSV(csv,fn){ const b=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const l=document.createElement('a'); l.href=URL.createObjectURL(b); l.setAttribute('download',fn); document.body.appendChild(l); l.click(); document.body.removeChild(l); }
+
+function exportMaster() {
+    if (!members.length) return;
+    let csv = "ID,Nombre,Edad,Telefono,Social,Estado Espiritual,Cargo,Area Servicio,Lider,Estatus Asistencia,F. Bautismo,Domicilio\n";
+    members.forEach((m,i) => { csv+=`${i+1},"${m.nombre||''}",${calculateAge(m.fechaNac)},"${m.telefono||''}","${m.social||''}","${m.estadoEspiritual||''}","${m.cargo||''}","${m.areaServicio||''}","${m.lider||''}","${m.estadoAsistencia||''}","${m.fechaBautismo||''}","${m.domicilio||''}"\n`; });
+    downloadCSV(csv,"FireGen_BaseMaestro.csv");
+}
+function exportAttendance() {
+    if (!members.length) return;
+    const period = document.getElementById('attMonthSelector').value;
+    let csv = `Control Asistencia - Periodo ${period}\nNombre,Semana 1,Semana 2,Semana 3,Semana 4,Semana 5,Total Mes\n`;
+    members.forEach(m => { const sem=currentAttData[m.firebaseId]||[3,3,3,3,3]; const r=[m.nombre,...sem.map(getAttIcon)]; r.push(sem.reduce((a,s)=>a+(s===1||s===2?1:0),0)); csv+=`"${r.join('","')}"\n`; });
+    downloadCSV(csv,`FireGen_Asistencia_${period}.csv`);
+}
+function exportMonthlyReport() {
+    const per = document.getElementById('repPeriodo').value || 'S_P';
+    let csv = `INFORME MENSUAL FIREGEN - ${per}\nSemana,Tema,Asistencia,Nuevos,Decisiones\n`;
+    document.querySelectorAll('.row-report-data').forEach((row,i) => {
+        csv += `Semana ${i+1},"${row.querySelector('.rep-tema').value}",${row.querySelector('.rep-asist').value||0},${row.querySelector('.rep-nuevos').value||0},${row.querySelector('.rep-decis').value||0}\n`;
+    });
+    csv += `\nMETRICAS CLAVE\nBautismos,${document.getElementById('inp-bautismos').value}\nAl Servicio,${document.getElementById('inp-servicio').value}\nAlejados,${document.getElementById('inp-alejados').value}\nRescatados,${document.getElementById('inp-rescatados').value}\nPromedio,${document.getElementById('rep-avg').innerText}\n`;
+    downloadCSV(csv,`FireGen_InformeMensual_${per}.csv`);
+}
+function exportStrategy() {
+    let csv = "Mes,Asistencia Promedio,Nuevos,Bautismos,Rescatados,Total Miembros\n";
+    MESES_LABELS.forEach((mes, i) => {
+        const avg = document.getElementById(`h-avg-${i}`) ? document.getElementById(`h-avg-${i}`).innerText : '—';
+        const nw  = document.getElementById(`h-new-${i}`) ? document.getElementById(`h-new-${i}`).innerText : '—';
+        const bau = document.getElementById(`h-bau-${i}`) ? document.getElementById(`h-bau-${i}`).innerText : '—';
+        const res = document.getElementById(`h-res-${i}`) ? document.getElementById(`h-res-${i}`).innerText : '—';
+        const tot = document.getElementById(`h-tot-${i}`) ? document.getElementById(`h-tot-${i}`).innerText : '—';
+        csv += `${mes},${avg},${nw},${bau},${res},${tot}\n`;
+    });
+    downloadCSV(csv,"FireGen_CrecimientoHistorico.csv");
+}
+
+// Inicializar syncStrategy después del listener de miembros
+window.addEventListener('load', () => {
+    const now = new Date();
+    const cp  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    setTimeout(() => syncStrategy(cp), 300);
+});
+</script>
 </body>
 </html>
